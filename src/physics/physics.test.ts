@@ -271,4 +271,24 @@ describe('Modèle de vol 6-DDL (RK4 240 Hz)', () => {
     expect(m.onGroundMask).not.toBe(0);
     expect(m.tdVs).toBeLessThan(3.7);
   });
+
+  it('catapultage Rafale : refusé sans plein gaz, puis lancement à V_R en ~2 s et envol', () => {
+    const m = new FlightModel(cfg('rafale', 'cvn', 'runway'));
+    expect(m.catState).toBe(1);
+    const inp = inputs(0.5, 0.5);
+    inp[I.CATAPULT] = 1;
+    for (let i = 0; i < 240; i++) m.step(1 / 240, inp);
+    expect(m.catState).toBe(1); // gaz insuffisants : la retenue tient
+    inp[I.THROTTLE] = 1;
+    let tEnd = -1;
+    for (let i = 0; i < 240 * 12 && !m.crashed; i++) {
+      inp[I.PITCH] = m.catState === 3 ? 0.35 : 0;
+      m.step(1 / 240, inp);
+      if (m.catState === 3 && tEnd < 0) tEnd = m.t;
+    }
+    expect(m.crashed, m.crashReason).toBe(false);
+    expect(tEnd).toBeGreaterThan(0);
+    expect(m.S[1]).toBeGreaterThan(40); // au-dessus du pont (18,5 m)
+  });
 });
+

@@ -132,6 +132,8 @@ export class FlightScene {
   /** position de l'œil (monde) — pour PAPI, FLOLS, audio */
   readonly eyeWorld = new THREE.Vector3();
   replayTarget: Float64Array | null = null;
+  private hookNode: THREE.Object3D | null = null;
+  private readonly hookTip = new THREE.Vector3();
 
   constructor(canvas: HTMLCanvasElement, spec: AircraftSpec, ap: AirportDef, xcg: number, gfx: GraphicsSettings, wx: WeatherSettings) {
     this.spec = spec;
@@ -176,6 +178,7 @@ export class FlightScene {
     this.aircraft.traverse((o) => { const mesh = o as THREE.Mesh; if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; } });
     this.scene.add(this.aircraft);
     this.animator = new AircraftAnimator(this.aircraft, spec);
+    this.hookNode = this.aircraft.getObjectByName('hook') ?? null;
     this.cockpit = new Cockpit3D(spec, xcg);
     this.aircraft.add(this.cockpit.group);
     this.cockpit.group.visible = false;
@@ -360,7 +363,15 @@ export class FlightScene {
       const g = this.carrier.group;
       g.position.set(s[O.CARRIER_X], s[O.CARRIER_HEAVE], s[O.CARRIER_Z]);
       g.rotation.set(s[O.CARRIER_ROLL], Math.PI / 2 - s[O.CARRIER_HDG], s[O.CARRIER_PITCH], 'YZX');
-      this.carrier.update(dt);
+      // point d'accrochage de la crosse (repère navire) pour tendre le câble
+      let hookLocal: THREE.Vector3 | null = null;
+      if (s[O.WIRE] > 0 && this.hookNode) {
+        hookLocal = this.hookNode.localToWorld(this.hookTip.set(-1.8, 0, 0));
+        g.updateMatrixWorld();
+        g.worldToLocal(hookLocal);
+        hookLocal.y = Math.max(hookLocal.y, (this.ap.carrier?.deckHeight ?? 0) + 0.1);
+      }
+      this.carrier.update(dt, s, hookLocal);
       // FLOLS : position de la boule calculée depuis l'œil du pilote
       const ref = approachRef(this.ap, s[O.SIM_TIME]);
       this.carrier.setBall(flolsBall(ref, this.eyeWorld.x, this.eyeWorld.y, this.eyeWorld.z), true);

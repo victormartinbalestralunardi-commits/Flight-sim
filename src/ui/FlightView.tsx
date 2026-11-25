@@ -192,6 +192,10 @@ export default function FlightView() {
       else if (a === 'failuresPanel') setShowFail((v) => !v);
       else if (a === 'debugPanel') setShowDebug((v) => !v);
       else if (a === 'photoMode') setPhoto((v) => !v);
+      else if (a === 'catapult' && ap.id === 'cvn') {
+        if (input.pilot.throttle < 0.85) setToast('Catapulte : mettez plein gaz (≥ 85 %, PC sur chasseur) avant le lancement');
+        else audio.burst('wire');
+      }
       else if (['gearToggle', 'flapsDown', 'flapsUp', 'speedbrakeToggle', 'parkingBrake', 'hookToggle', 'fbwToggle', 'autopilot', 'landingLights', 'stovlToggle', 'spoilerArm'].includes(a)) audio.burst('click');
     };
     input.attach(cv);
@@ -390,6 +394,9 @@ export default function FlightView() {
           {mode === 'replay' && <Badge tone="warn">REPLAY</Badge>}
           {s[O.FCS_LAW] > 0 && spec.fcs === 'fbw' && <Badge tone="warn">{s[O.FCS_LAW] === 1 ? 'ALTERNATE LAW' : 'DIRECT LAW'}</Badge>}
           {s[O.WIND_SHEAR] > 0 && <Badge tone="bad">WINDSHEAR</Badge>}
+          {s[O.CAT_STATE] === 1 && <Badge tone="warn">CATAPULTE ATTELÉE — plein gaz puis {keyLabel(store.get().settings.controls.bindings.catapult?.[0] ?? 'KeyT')}</Badge>}
+          {s[O.CAT_STATE] === 2 && <Badge tone="info">LANCEMENT {Math.round(s[O.CAT_V] * 1.944)} kt</Badge>}
+          {s[O.WIRE] > 0 && <Badge tone="good">BRIN n°{s[O.WIRE]} — {s[O.WIRE_PULL].toFixed(0)} m</Badge>}
         </GlassPanel>
         <GlassPanel className="flex gap-1.5 p-1.5" animate={false}>
           <GlassButton size="sm" onClick={() => { const m: CameraMode = cam === 'cockpit' ? 'chase' : 'cockpit'; sceneRef.current?.setMode(m); setCam(m); }}>{cam === 'cockpit' ? 'Vue ext.' : 'Cockpit'}</GlassButton>
