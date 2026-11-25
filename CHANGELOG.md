@@ -5,6 +5,18 @@ horodatage UTC, fichiers, détail technique, état de vérification).
 
 ---
 
+## [0.6.1] — Prompt de recréation du projet — 2026-11-25 13:05 UTC
+
+### Fichiers créés
+- `docs/PROMPT_PROJET.md` — prompt complet et précis pour recréer le projet en local
+  (stack et versions, conventions, physique, VLM/CFD, 7 appareils, aéroports, rendu, UI, PWA,
+  tests, pièges connus).
+
+### Vérification
+- Documentation uniquement : aucun code modifié (`vitest` et `build` inchangés, 35/35).
+
+---
+
 ## [0.6.0] — Performances, touches, taxiways, porte-avions, remodelage, soufflerie — 2026-11-25 12:40 UTC
 
 Demande utilisateur : remodéliser/affiner les avions, jeu trop lent, touches peu réactives,
