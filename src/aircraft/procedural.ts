@@ -10,6 +10,8 @@
 import * as THREE from 'three';
 import type { AircraftSpec, ControlSurface, LiftingSurface, Station } from './types';
 import { createMaterials, type AircraftMaterials } from './materials';
+import { createLivery } from './livery';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 const V3 = THREE.Vector3;
 
@@ -50,17 +52,21 @@ function superEllipse(theta: number, n: number): [number, number] {
 function buildFuselage(spec: AircraftSpec, mat: THREE.Material): THREE.Mesh {
   const prof = PROFILES[spec.id];
   const L = spec.fuselage.length;
-  const NX = spec.category === 'airliner' ? 90 : 70;
-  const NT = prof.radial;
+  const NX = spec.category === 'airliner' ? 120 : 96;
+  const NT = prof.flat ? prof.radial : Math.max(prof.radial, 40);
   const pos: number[] = [];
+  const uv: number[] = [];
   const idx: number[] = [];
   for (let i = 0; i <= NX; i++) {
-    const xi = Math.pow(i / NX, 1.0);
+    // échantillonnage resserré au nez et à la queue (galbe plus lisse)
+    const t = i / NX;
+    const xi = 0.5 - 0.5 * Math.cos(Math.PI * t) * 0.35 - (0.5 - t) * 0.65;
     const [, w, h, yc, n] = sampleProfile(prof.keys, xi);
     for (let j = 0; j <= NT; j++) {
       const th = (j / NT) * Math.PI * 2;
       const [cx, sy] = superEllipse(th, n);
       pos.push(-xi * L, spec.fuselage.axisY + yc + sy * h, cx * w);
+      uv.push(xi, j / NT);
     }
   }
   for (let i = 0; i < NX; i++) for (let j = 0; j < NT; j++) {
@@ -69,9 +75,21 @@ function buildFuselage(spec: AircraftSpec, mat: THREE.Material): THREE.Mesh {
   }
   let geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2));
   geo.setIndex(idx);
   if (prof.flat) geo = geo.toNonIndexed();
   geo.computeVertexNormals();
+  if (!prof.flat) {
+    // couture j=0 / j=NT : normales moyennées (pas de ligne visible)
+    const nr = geo.getAttribute('normal') as THREE.BufferAttribute;
+    for (let i = 0; i <= NX; i++) {
+      const a = i * (NT + 1), b = a + NT;
+      const x = nr.getX(a) + nr.getX(b), y = nr.getY(a) + nr.getY(b), z = nr.getZ(a) + nr.getZ(b);
+      const l = Math.hypot(x, y, z) || 1;
+      nr.setXYZ(a, x / l, y / l, z / l);
+      nr.setXYZ(b, x / l, y / l, z / l);
+    }
+  }
   const m = new THREE.Mesh(geo, mat);
   m.name = 'fuselage';
   m.castShadow = true;
@@ -399,8 +417,18 @@ function buildEngines(ctx: BuildCtx): void {
       }
       // pylône
       if (big) {
-        const py = new THREE.Mesh(new THREE.BoxGeometry(len * 0.9, Math.max(0.6, -ey * 0.4 + 1.6), 0.35), mats.skin);
-        py.position.set(len * 0.55, R + 0.5, 0);
+        // mât : du dessus de la nacelle jusqu'à l'intrados, sous le caisson de voilure
+        const w = wingAt(spec, Math.abs(ez));
+        const x0 = Math.min(len * 0.4, w.x - ex - w.chord * 0.3), x1 = len * 0.72;
+        const yTop = w.y - ey - 0.15;
+        const hp = Math.max(0.5, yTop - R * 0.85);
+        const pg = new THREE.BoxGeometry(x1 - x0, hp, 0.45);
+        // biseau avant : profil effilé
+        const pp = pg.getAttribute('position') as THREE.BufferAttribute;
+        for (let k = 0; k < pp.count; k++) if (pp.getX(k) > 0 && pp.getY(k) > 0) pp.setX(k, pp.getX(k) - (x1 - x0) * 0.35);
+        pg.computeVertexNormals();
+        const py = new THREE.Mesh(pg, mats.skin);
+        py.position.set((x0 + x1) / 2, R * 0.85 + hp / 2, 0);
         g.add(py);
       } else {
         const py = new THREE.Mesh(new THREE.BoxGeometry(len * 0.6, 0.35, Math.abs(ez) - 1.2), mats.skin);
@@ -558,37 +586,142 @@ function buildCanopyAndWindows(ctx: BuildCtx): void {
     canopy.position.set(ex + (dr ? -0.6 : 0.25), Math.max(ey - 0.55, sec.yc + sec.h * 0.55), 0);
     canopy.userData.slide = dr;
     root.add(canopy);
-  } else {
-    // pare-brise : coque sombre légèrement plus grande que le fuselage
-    const sec = fuselageSection(spec, ex);
-    const ws = new THREE.Mesh(new THREE.SphereGeometry(1, 32, 12, -Math.PI / 2.6, Math.PI / 1.3, Math.PI * 0.18, Math.PI * 0.22), mats.window);
-    ws.scale.set(spec.length * 0.035, sec.h * 1.03, sec.w * 1.03);
-    ws.rotation.y = Math.PI / 2;
-    ws.position.set(ex + 0.4, sec.yc, 0);
-    ws.name = 'windshield';
-    root.add(ws);
-    // hublots (instanciés)
-    const rows = spec.id === 'a380' ? [0.05, 0.55] : [0.18];
-    const size = spec.id === 'g8000' ? 0.36 : 0.26;
-    const pitch = spec.id === 'g8000' ? 1.3 : 0.53;
-    const x0 = -spec.length * 0.13, x1 = -spec.length * (spec.id === 'g8000' ? 0.62 : 0.78);
-    const n = Math.floor((x0 - x1) / pitch);
-    const geo = new THREE.SphereGeometry(1, 10, 8);
-    const im = new THREE.InstancedMesh(geo, mats.window, n * rows.length * 2);
-    im.name = 'windows';
-    const m4 = new THREE.Matrix4();
-    let k = 0;
-    for (const rf of rows) for (let i = 0; i < n; i++) {
-      const x = x0 - i * pitch;
-      const s = fuselageSection(spec, x);
-      for (const side of [1, -1]) {
-        const y = s.yc + s.h * (rf - 0.25) * (spec.id === 'a380' ? 1.2 : 1);
-        const zz = s.w * Math.sqrt(Math.max(0, 1 - ((y - s.yc) / s.h) ** 2)) * side * 1.005;
-        m4.compose(new V3(x, y, zz), new THREE.Quaternion(), new V3(size * 0.75, size, 0.04));
-        im.setMatrixAt(k++, m4);
-      }
+    // arceau de verrière
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(1, 0.035, 6, 24, Math.PI), mats.metalDark);
+    arch.rotation.y = Math.PI / 2;
+    arch.scale.set(wid, hei, 1);
+    arch.position.x = dr ? 0.1 : -len * 0.18;
+    canopy.add(arch);
+  }
+  // avions de ligne / affaires : hublots, pare-brise, portes peints dans la livrée (livery.ts)
+}
+
+/** Point de l'aile (BA, corde) à la demi-envergure |z|. */
+function wingAt(spec: AircraftSpec, zAbs: number): { x: number; y: number; chord: number } {
+  const st = spec.surfaces[0].stations;
+  for (let i = 0; i < st.length - 1; i++) {
+    const a = st[i], b = st[i + 1];
+    if (zAbs <= b.le[2] || i === st.length - 2) {
+      const f = Math.max(0, Math.min(1, (zAbs - a.le[2]) / ((b.le[2] - a.le[2]) || 1)));
+      return { x: a.le[0] + (b.le[0] - a.le[0]) * f, y: a.le[1] + (b.le[1] - a.le[1]) * f, chord: a.chord + (b.chord - a.chord) * f };
     }
-    root.add(im);
+  }
+  return { x: st[0].le[0], y: st[0].le[1], chord: st[0].chord };
+}
+
+/** Détails de forme : carénage voilure-fuselage, LERX/chines, perche, cône de queue, raccords. */
+function buildDetails(ctx: BuildCtx): void {
+  const { spec, mats, root } = ctx;
+  const L = spec.fuselage.length;
+  if (spec.category === 'airliner' || spec.category === 'bizjet') {
+    const w = wingAt(spec, 0);
+    const sec = fuselageSection(spec, w.x - w.chord * 0.45);
+    const f = new THREE.Mesh(new THREE.SphereGeometry(1, 36, 18), mats.skin);
+    f.scale.set(w.chord * 0.78, sec.h * 0.42, sec.w * 0.98);
+    f.position.set(w.x - w.chord * 0.42, sec.yc - sec.h * 0.62, 0);
+    root.add(f);
+    // cône de queue / sortie APU
+    const tail = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.28, 0.9, 16), mats.metalDark);
+    tail.rotation.z = Math.PI / 2;
+    const ts = fuselageSection(spec, -L * 0.995);
+    tail.position.set(-L * 0.995, ts.yc, 0);
+    root.add(tail);
+    if (spec.id === 'g8000') {
+      // carénage de jonction de l'empennage en T
+      const vt = spec.surfaces.find((s) => s.role === 'vtail')!.stations;
+      const top = vt[vt.length - 1];
+      const bullet = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 12), mats.skin);
+      bullet.scale.set(top.chord * 0.7, 0.35, 0.35);
+      bullet.position.set(top.le[0] - top.chord * 0.45, top.le[1], 0);
+      root.add(bullet);
+    }
+  }
+  if (spec.id === 'f22' || spec.id === 'f35') {
+    // chines / LERX : plaques triangulaires du nez à l'emplanture
+    const w = wingAt(spec, 0);
+    for (const side of [1, -1]) {
+      const sh = new THREE.Shape();
+      const s0 = fuselageSection(spec, -L * 0.1), s1 = fuselageSection(spec, w.x);
+      sh.moveTo(-L * 0.08, s0.w * 0.95);
+      sh.lineTo(w.x - 0.5, s1.w * 1.25);
+      sh.lineTo(w.x - w.chord * 0.3, s1.w * 0.9);
+      sh.lineTo(-L * 0.12, s0.w * 0.8);
+      const g = new THREE.ExtrudeGeometry(sh, { depth: 0.06, bevelEnabled: false });
+      g.rotateX(Math.PI / 2);
+      if (side < 0) g.scale(1, 1, -1);
+      const m = new THREE.Mesh(g, mats.skin);
+      m.position.y = s0.yc + 0.03;
+      root.add(m);
+    }
+  }
+  if (spec.id === 'rafale') {
+    // perche de ravitaillement fixe (côté droit du pare-brise)
+    const probe = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.06, 1.6, 10), mats.metalDark);
+    probe.rotation.z = Math.PI / 2 - 0.08;
+    probe.position.set(spec.eye[0] + 1.2, spec.eye[1] - 0.25, 0.42);
+    root.add(probe);
+    // raccords des canards
+    const cn = spec.surfaces.find((s) => s.role === 'canard')!.stations[0];
+    for (const side of [1, -1]) {
+      const pod = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), mats.skin);
+      pod.scale.set(cn.chord * 0.7, 0.18, 0.16);
+      pod.position.set(cn.le[0] - cn.chord * 0.4, cn.le[1], side * cn.le[2]);
+      root.add(pod);
+    }
+  }
+  if (spec.id === 'dr400') {
+    // carénage d'emplanture (congé) et antenne
+    const w = wingAt(spec, 0.5);
+    for (const side of [1, -1]) {
+      const fil = new THREE.Mesh(new THREE.SphereGeometry(1, 16, 10), mats.skin);
+      fil.scale.set(w.chord * 0.55, 0.12, 0.2);
+      fil.position.set(w.x - w.chord * 0.45, w.y + 0.05, side * 0.52);
+      root.add(fil);
+    }
+    const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.45, 6), mats.metalDark);
+    ant.position.set(-3.2, 0.62, 0);
+    ant.rotation.z = 0.35;
+    root.add(ant);
+  }
+}
+
+/**
+ * Fusion des pièces statiques par matériau à l'intérieur de chaque nœud (réduction des
+ * draw calls) — les nœuds nommés (gouvernes, train, feux, hélice…) restent animables.
+ */
+function mergeStatic(root: THREE.Object3D): void {
+  const groups: THREE.Object3D[] = [];
+  root.traverse((o) => groups.push(o));
+  for (const parent of groups) {
+    const byMat = new Map<THREE.Material, THREE.Mesh[]>();
+    for (const ch of parent.children) {
+      const m = ch as THREE.Mesh;
+      if (!m.isMesh || (m as THREE.InstancedMesh).isInstancedMesh || m.children.length) continue;
+      if (m.name && m.name !== 'wheel') continue;
+      if (Array.isArray(m.material) || (m.material as THREE.ShaderMaterial).isShaderMaterial) continue;
+      const l = byMat.get(m.material as THREE.Material) ?? [];
+      l.push(m);
+      byMat.set(m.material as THREE.Material, l);
+    }
+    for (const [mat, list] of byMat) {
+      if (list.length < 2) continue;
+      const geos = list.map((m) => {
+        m.updateMatrix();
+        let g = m.geometry.index ? m.geometry.toNonIndexed() : m.geometry.clone();
+        for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+        if (!g.getAttribute('uv')) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.getAttribute('position').count * 2), 2));
+        if (!g.getAttribute('normal')) g.computeVertexNormals();
+        g = g.applyMatrix4(m.matrix);
+        return g;
+      });
+      const merged = mergeGeometries(geos);
+      if (!merged) continue;
+      for (const m of list) parent.remove(m);
+      const mm = new THREE.Mesh(merged, mat);
+      mm.castShadow = true;
+      mm.receiveShadow = true;
+      parent.add(mm);
+    }
   }
 }
 
@@ -697,7 +830,13 @@ export function buildAircraftModel(spec: AircraftSpec, xcg = 0): AircraftModel {
   const model = new THREE.Group();
   model.name = `${spec.id}_model`;
   const ctx: BuildCtx = { spec, mats, root: model };
-  model.add(buildFuselage(spec, spec.id === 'dr400' ? mats.skin : mats.skin));
+  // fuselage : matériau de peinture + livrée texturée (hublots, cheatlines, immatriculation)
+  const livery = createLivery(spec);
+  const fusMat = mats.skin.clone();
+  fusMat.map = livery.map;
+  fusMat.roughnessMap = livery.roughness;
+  fusMat.color.set(0xffffff);
+  model.add(buildFuselage(spec, fusMat));
   for (const s of spec.surfaces) {
     if (s.symmetric) {
       model.add(buildSurface(ctx, s, 1));
@@ -709,6 +848,7 @@ export function buildAircraftModel(spec: AircraftSpec, xcg = 0): AircraftModel {
   buildCanopyAndWindows(ctx);
   buildIntakes(ctx);
   buildLightsAndHook(ctx);
+  buildDetails(ctx);
   if (spec.id === 'dr400') {
     // capot moteur rouge
     const cowl = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), mats.secondary);
@@ -716,6 +856,7 @@ export function buildAircraftModel(spec: AircraftSpec, xcg = 0): AircraftModel {
     cowl.position.set(-0.5, 0, 0);
     model.add(cowl);
   }
+  mergeStatic(model);
   model.position.x = -xcg;
   const object = new THREE.Group();
   object.name = spec.id;
