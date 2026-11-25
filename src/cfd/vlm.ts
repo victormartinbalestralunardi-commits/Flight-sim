@@ -201,7 +201,7 @@ export function buildLattice(spec: AircraftSpec, opts: LatticeOptions = {}): Lat
 const CORE2 = 1e-10;
 
 /** Ajoute la vitesse induite (Γ=1) d'un segment X1→X2 au point P dans out. */
-function segment(px: number, py: number, pz: number, x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, out: Float64Array, core2: number): void {
+function segment(px: number, py: number, pz: number, x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, out: Float64Array, core2: number, absCore2 = 0): void {
   const r1x = px - x1, r1y = py - y1, r1z = pz - z1;
   const r2x = px - x2, r2y = py - y2, r2z = pz - z2;
   const cx = r1y * r2z - r1z * r2y;
@@ -212,8 +212,16 @@ function segment(px: number, py: number, pz: number, x1: number, y1: number, z1:
   const r2 = Math.sqrt(r2x * r2x + r2y * r2y + r2z * r2z);
   const r0x = x2 - x1, r0y = y2 - y1, r0z = z2 - z1;
   const l2 = r0x * r0x + r0y * r0y + r0z * r0z;
-  if (c2 < core2 * l2 || r1 < 1e-9 || r2 < 1e-9) return;
-  const k = (r0x * (r1x / r1 - r2x / r2) + r0y * (r1y / r1 - r2y / r2) + r0z * (r1z / r1 - r2z / r2)) / (4 * Math.PI * c2);
+  if (r1 < 1e-9 || r2 < 1e-9) return;
+  let denom: number;
+  if (absCore2 > 0) {
+    // noyau visqueux (Vatistas n=1) de rayon absolu : d² → d² + rc²
+    denom = c2 + absCore2 * l2;
+  } else {
+    if (c2 < core2 * l2) return;
+    denom = c2;
+  }
+  const k = (r0x * (r1x / r1 - r2x / r2) + r0y * (r1y / r1 - r2y / r2) + r0z * (r1z / r1 - r2z / r2)) / (4 * Math.PI * denom);
   out[0] += k * cx;
   out[1] += k * cy;
   out[2] += k * cz;
@@ -223,14 +231,14 @@ function segment(px: number, py: number, pz: number, x1: number, y1: number, z1:
  * Vitesse induite au point (px,py,pz) par le fer à cheval j (Γ=1).
  * `stretch` = 1/β appliqué aux coordonnées x (Göthert). `boundOnly`/`trailOnly` pour diagnostics.
  */
-export function horseshoe(L: Lattice, j: number, px: number, py: number, pz: number, stretch: number, out: Float64Array, core2 = CORE2, includeBound = true): void {
+export function horseshoe(L: Lattice, j: number, px: number, py: number, pz: number, stretch: number, out: Float64Array, core2 = CORE2, includeBound = true, absCore2 = 0): void {
   const ax = L.A[3 * j] * stretch, ay = L.A[3 * j + 1], az = L.A[3 * j + 2];
   const bx = L.B[3 * j] * stretch, by = L.B[3 * j + 1], bz = L.B[3 * j + 2];
   const far = L.farLen;
   const X = px * stretch;
-  segment(X, py, pz, ax - far, ay, az, ax, ay, az, out, core2);
-  if (includeBound) segment(X, py, pz, ax, ay, az, bx, by, bz, out, core2);
-  segment(X, py, pz, bx, by, bz, bx - far, by, bz, out, core2);
+  segment(X, py, pz, ax - far, ay, az, ax, ay, az, out, core2, absCore2);
+  if (includeBound) segment(X, py, pz, ax, ay, az, bx, by, bz, out, core2, absCore2);
+  segment(X, py, pz, bx, by, bz, bx - far, by, bz, out, core2, absCore2);
 }
 
 // ───────────────────────────── Solveur ─────────────────────────────
@@ -442,7 +450,8 @@ export class VlmSolver {
   }
 
   /** Vitesse totale au point p (pour les lignes de courant). */
-  velocityAt(gamma: Float64Array, cond: FlowCondition, px: number, py: number, pz: number, out: Float64Array, core2 = 4e-3): void {
+  velocityAt(gamma: Float64Array, cond: FlowCondition, px: number, py: number, pz: number, out: Float64Array, coreRadius = 0.05): void {
+    const rc2 = coreRadius * coreRadius;
     const L = this.L;
     const beta = Math.sqrt(Math.max(0.05, 1 - Math.min(cond.mach, 0.95) ** 2));
     const stretch = 1 / beta;
@@ -454,7 +463,7 @@ export class VlmSolver {
     const t = this.tmp;
     for (let j = 0; j < L.n; j++) {
       t[0] = 0; t[1] = 0; t[2] = 0;
-      horseshoe(L, j, px, py, pz, stretch, t, core2);
+      horseshoe(L, j, px, py, pz, stretch, t, CORE2, true, rc2);
       const g = gamma[j];
       out[0] += g * t[0] * beta;
       out[1] += g * t[1];

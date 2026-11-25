@@ -4,3 +4,88 @@
 
 html, body, #root { height: 100%; margin: 0; overflow: hidden; }
 body { font-family: 'SF Pro Display', 'SF Pro Text', Inter, system-ui, -apple-system, sans-serif; color: #f5f7fa; -webkit-font-smoothing: antialiased; }
+
+:root {
+  /* Opacité du verre adaptée à la luminosité de la scène (pilotée par le rendu) */
+  --glass-alpha: 0.12;
+  --glass-tint: 18, 22, 30;
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@layer components {
+/* ───────────── Apple « Liquid Glass » ───────────── */
+.glass {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, calc(var(--glass-alpha) + 0.06)), rgba(255, 255, 255, calc(var(--glass-alpha) * 0.4))),
+    rgba(var(--glass-tint), 0.28);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow:
+    0 10px 40px rgba(0, 0, 0, 0.30),
+    0 2px 6px rgba(0, 0, 0, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.07),
+    inset 0 0 22px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
+}
+/* reflet spéculaire supérieur */
+.glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.22) 0%, rgba(255, 255, 255, 0.04) 22%, transparent 45%);
+  pointer-events: none;
+  z-index: -1;
+}
+/* reflet lumineux qui suit le pointeur */
+.glass::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(420px circle at var(--mx, 50%) var(--my, -30%), rgba(255, 255, 255, 0.16), transparent 42%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+.glass:hover::after { opacity: 1; }
+
+.glass-btn {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.07));
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  transition: transform 0.45s var(--spring), background 0.25s ease, box-shadow 0.25s ease;
+}
+.glass-btn:hover { transform: translateY(-1px) scale(1.025); background: linear-gradient(180deg, rgba(255, 255, 255, 0.28), rgba(255, 255, 255, 0.10)); }
+.glass-btn:active { transform: scale(0.965); transition-duration: 0.12s; }
+.glass-btn.primary { background: linear-gradient(180deg, rgba(64, 156, 255, 0.85), rgba(10, 100, 230, 0.75)); border-color: rgba(160, 210, 255, 0.55); }
+.glass-btn.danger { background: linear-gradient(180deg, rgba(255, 90, 80, 0.8), rgba(210, 40, 40, 0.7)); border-color: rgba(255, 180, 170, 0.5); }
+.glass-btn.success { background: linear-gradient(180deg, rgba(60, 210, 120, 0.85), rgba(20, 160, 80, 0.75)); border-color: rgba(170, 255, 200, 0.55); }
+.glass-btn.active { background: linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.18)); }
+
+}
+
+.spring-in { animation: springIn 0.6s var(--spring) both; }
+@keyframes springIn { from { opacity: 0; transform: translateY(14px) scale(0.96); } to { opacity: 1; transform: none; } }
+.fade-in { animation: fadeIn 0.4s ease both; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* curseurs */
+input[type='range'].glass-range { -webkit-appearance: none; appearance: none; height: 6px; border-radius: 999px; background: linear-gradient(90deg, rgba(120, 190, 255, 0.95) var(--pct, 50%), rgba(255, 255, 255, 0.18) var(--pct, 50%)); outline: none; }
+input[type='range'].glass-range::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; border-radius: 999px; background: rgba(255, 255, 255, 0.95); box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35), inset 0 -1px 0 rgba(0, 0, 0, 0.1); transition: transform 0.3s var(--spring); cursor: grab; }
+input[type='range'].glass-range::-webkit-slider-thumb:active { transform: scale(1.2); }
+input[type='range'].glass-range::-moz-range-thumb { width: 20px; height: 20px; border: none; border-radius: 999px; background: #fff; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35); }
+
+.scroll-glass::-webkit-scrollbar { width: 8px; }
+.scroll-glass::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.22); border-radius: 999px; }
+.tabular { font-variant-numeric: tabular-nums; }
