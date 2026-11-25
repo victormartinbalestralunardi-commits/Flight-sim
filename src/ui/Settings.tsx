@@ -1,6 +1,6 @@
 /** Onglet Paramètres (Liquid Glass) : clavier/souris, manette/HOTAS, graphismes, météo, audio. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ACTIONS, assignKey, defaultBindings, findConflicts, keyLabel, type Action } from '../controls/bindings';
+import { ACTIONS, assignKey, defaultBindings, findConflicts, keyLabel, keyboardLayout, type Action } from '../controls/bindings';
 import { listGamepads, shapeAxis, type AxisName } from '../controls/gamepad';
 import { presetValues, store, updateSettings, useStore, type QualityPreset } from './store';
 import { Badge, GlassButton, GlassSlider, GlassToggle, Modal, SectionTitle, Segmented } from './glass';
@@ -110,7 +110,8 @@ function KeysTab() {
         <GlassSlider label="Sensibilité" value={c.mouseSensitivity} min={0.3} max={2.5} step={0.05} onChange={(v) => updateSettings('controls', { mouseSensitivity: v })} format={(v) => v.toFixed(2)} />
         <GlassSlider label="Zone morte" value={c.mouseDeadzone} min={0} max={0.25} step={0.01} onChange={(v) => updateSettings('controls', { mouseDeadzone: v })} format={(v) => `${Math.round(v * 100)} %`} />
         <SectionTitle>Clavier</SectionTitle>
-        <GlassSlider label="Vitesse des axes clavier" value={c.keyboardRate} min={0.5} max={5} step={0.1} onChange={(v) => updateSettings('controls', { keyboardRate: v })} format={(v) => v.toFixed(1)} unit="/s" />
+        <GlassSlider label="Vitesse des axes clavier" value={c.keyboardRate} min={1} max={10} step={0.1} onChange={(v) => updateSettings('controls', { keyboardRate: v })} format={(v) => v.toFixed(1)} unit="/s" />
+        <div className="text-[11px] text-white/60">Disposition détectée : <b>{keyboardLayout === 'inconnue' ? 'non détectable (libellés QWERTY)' : keyboardLayout.toUpperCase()}</b> — les touches sont liées à leur position physique (ZQSD en AZERTY = WASD en QWERTY).</div>
         <div className="text-[11px] text-white/45">Cliquez sur une case puis appuyez sur la touche. Échap annule, Retour arrière efface. Sauvegarde automatique (localStorage).</div>
         <GlassButton size="sm" onClick={() => updateSettings('controls', { bindings: defaultBindings() })}>Réinitialiser le clavier</GlassButton>
       </div>

@@ -37,7 +37,7 @@ export function GlassButton({
       type="button"
       title={title}
       disabled={disabled}
-      onClick={onClick}
+      onClick={(e) => { onClick?.(); e.currentTarget.blur(); /* rend Espace/Entrée aux commandes de vol */ }}
       onMouseMove={trackPointer}
       className={`glass-btn ${variant !== 'default' ? variant : ''} ${active ? 'active' : ''} ${sz} whitespace-nowrap font-medium text-white tracking-tight select-none disabled:opacity-40 disabled:pointer-events-none ${className}`}
     >

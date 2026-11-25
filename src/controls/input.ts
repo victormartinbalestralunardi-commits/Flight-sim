@@ -189,10 +189,10 @@ export class InputManager {
 
     const rate = s.keyboardRate * dt;
     const axis = (cur: number, pos: boolean, neg: boolean) => {
-      if (pos && !neg) return Math.min(1, cur + rate);
-      if (neg && !pos) return Math.max(-1, cur - rate);
+      if (pos && !neg) return Math.min(1, Math.max(0, cur) + rate);
+      if (neg && !pos) return Math.max(-1, Math.min(0, cur) - rate);
       // retour au neutre
-      const back = rate * 1.6;
+      const back = rate * 2.5; // retour au neutre rapide (ressort du manche)
       return Math.abs(cur) < back ? 0 : cur - Math.sign(cur) * back;
     };
     let kp = axis(this.kp, this.held('pitchUp'), this.held('pitchDown'));
@@ -209,8 +209,8 @@ export class InputManager {
     p.roll = clamp(kr + gp.roll, -1, 1);
     p.yaw = clamp(ky + gp.yaw, -1, 1);
     // gaz : clavier incrémental, axe manette absolu (seulement s'il bouge)
-    if (this.held('throttleUp')) p.throttle = Math.min(1, p.throttle + 0.5 * dt);
-    if (this.held('throttleDown')) p.throttle = Math.max(0, p.throttle - 0.5 * dt);
+    if (this.held('throttleUp')) p.throttle = Math.min(1, p.throttle + 0.8 * dt);
+    if (this.held('throttleDown')) p.throttle = Math.max(0, p.throttle - 0.8 * dt);
     if (gp.throttle !== null) {
       if (this.lastThrottleAxis === null || Math.abs(gp.throttle - this.lastThrottleAxis) > 0.01) {
         p.throttle = gp.throttle;

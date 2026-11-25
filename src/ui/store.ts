@@ -94,8 +94,8 @@ export interface AppState {
 
 const PRESETS: Record<QualityPreset, Partial<GraphicsSettings>> = {
   eco: { renderScale: 0.75, shadows: false, shadowCascades: 1, ssao: false, ssr: false, bloom: false, clouds: true, cloudRes: 0.25, maxPixelRatio: 1 },
-  medium: { renderScale: 1, shadows: true, shadowCascades: 2, ssao: false, ssr: false, bloom: true, clouds: true, cloudRes: 0.25, maxPixelRatio: 1.5 },
-  high: { renderScale: 1, shadows: true, shadowCascades: 3, ssao: true, ssr: false, bloom: true, clouds: true, cloudRes: 0.5, maxPixelRatio: 2 },
+  medium: { renderScale: 1, shadows: true, shadowCascades: 2, ssao: false, ssr: false, bloom: true, clouds: true, cloudRes: 0.25, maxPixelRatio: 1.25 },
+  high: { renderScale: 1, shadows: true, shadowCascades: 3, ssao: false, ssr: false, bloom: true, clouds: true, cloudRes: 0.5, maxPixelRatio: 1.5 },
   ultra: { renderScale: 1, shadows: true, shadowCascades: 4, ssao: true, ssr: true, bloom: true, clouds: true, cloudRes: 0.5, maxPixelRatio: 2 },
   cinema: { renderScale: 1.5, shadows: true, shadowCascades: 4, ssao: true, ssr: true, bloom: true, clouds: true, cloudRes: 0.5, maxPixelRatio: 2 },
 };
@@ -107,23 +107,31 @@ export function presetValues(p: QualityPreset): Partial<GraphicsSettings> {
 export function defaultSettings(): Settings {
   return {
     graphics: {
-      preset: 'high', renderScale: 1, drs: true, targetFps: 120, maxPixelRatio: 2, shadows: true, shadowCascades: 3, ssao: true, ssr: false,
-      bloom: true, clouds: true, cloudRes: 0.5, pathTracing: true, ptBounces: 5, ptMaxSamples: 512, fov: 62, showMetrics: true,
+      preset: 'medium', renderScale: 1, drs: true, targetFps: 60, maxPixelRatio: 1.25, shadows: true, shadowCascades: 2, ssao: false, ssr: false,
+      bloom: true, clouds: true, cloudRes: 0.25, pathTracing: true, ptBounces: 4, ptMaxSamples: 256, fov: 62, showMetrics: true,
     },
     weather: { windFrom: 140, windSpeedKt: 8, turbulence: 0.15, cloudCover: 0.45, cloudBase: 1400, timeOfDay: 14, deltaIsa: 0, seaState: 1 },
     audio: { master: 0.8, engines: 0.9, ambience: 0.6, alerts: 0.9, cockpit: 0.7, muted: false },
-    controls: { bindings: defaultBindings(), mouseYoke: false, mouseSensitivity: 1, mouseDeadzone: 0.04, keyboardRate: 2.2, gamepad: defaultGamepadConfig() },
+    controls: { bindings: defaultBindings(), mouseYoke: false, mouseSensitivity: 1, mouseDeadzone: 0.04, keyboardRate: 5, gamepad: defaultGamepadConfig() },
   };
 }
 
-const LS_KEY = 'aerosim3d.settings.v1';
+const LS_KEY = 'aerosim3d.settings.v2';
+/** v1 : graphismes trop lourds par défaut → seuls contrôles, météo et audio sont repris. */
+const LS_KEY_V1 = 'aerosim3d.settings.v1';
 
 function loadSettings(): Settings {
   const d = defaultSettings();
   try {
-    const raw = localStorage.getItem(LS_KEY);
+    let raw = localStorage.getItem(LS_KEY);
+    let legacy = false;
+    if (!raw) { raw = localStorage.getItem(LS_KEY_V1); legacy = true; }
     if (!raw) return d;
     const s = JSON.parse(raw) as Partial<Settings>;
+    if (legacy) {
+      delete s.graphics;
+      if (s.controls && (s.controls.keyboardRate ?? 0) < 4) s.controls.keyboardRate = 5;
+    }
     return {
       graphics: { ...d.graphics, ...s.graphics },
       weather: { ...d.weather, ...s.weather },

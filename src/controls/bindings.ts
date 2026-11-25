@@ -121,8 +121,34 @@ export function assignKey(b: Bindings, action: Action, slot: number, code: strin
   return next;
 }
 
-/** Libellé lisible d'un KeyboardEvent.code. */
+/**
+ * Disposition réelle du clavier (AZERTY, QWERTZ…) via `navigator.keyboard.getLayoutMap()`
+ * (Chrome / Edge). Les liaisons utilisent les POSITIONS physiques (KeyboardEvent.code) :
+ * sur AZERTY, « WASD » se trouve sous les touches imprimées « ZQSD ». Cette table sert à
+ * afficher la touche réellement imprimée.
+ */
+let layoutMap: Map<string, string> | null = null;
+export let keyboardLayout: 'azerty' | 'qwertz' | 'qwerty' | 'inconnue' = 'inconnue';
+
+export async function initKeyboardLayout(): Promise<void> {
+  const kb = (navigator as Navigator & { keyboard?: { getLayoutMap?: () => Promise<Map<string, string>> } }).keyboard;
+  if (!kb?.getLayoutMap) return;
+  try {
+    const m = await kb.getLayoutMap();
+    layoutMap = new Map(m);
+    const q = layoutMap.get('KeyQ'), y = layoutMap.get('KeyY');
+    keyboardLayout = q === 'a' ? 'azerty' : y === 'z' ? 'qwertz' : 'qwerty';
+  } catch {
+    /* API indisponible (Firefox, Safari) : libellés QWERTY */
+  }
+}
+
+/** Libellé lisible d'un KeyboardEvent.code (touche imprimée si la disposition est connue). */
 export function keyLabel(code: string): string {
+  const printed = layoutMap?.get(code);
+  if (printed && printed.trim() && (code.startsWith('Key') || code.startsWith('Digit') || /^(Comma|Period|Slash|Semicolon|Quote|BracketLeft|BracketRight|Minus|Equal|Backquote|Backslash|IntlBackslash)$/.test(code))) {
+    return printed.toUpperCase();
+  }
   if (code.startsWith('Key')) return code.slice(3);
   if (code.startsWith('Digit')) return code.slice(5);
   if (code.startsWith('Numpad')) return 'Pavé ' + code.slice(6);

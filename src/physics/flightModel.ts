@@ -107,6 +107,8 @@ export class FlightModel {
   tdCount = 0;
   wire = -1;
   private wireVEng = 0;
+  /** câble déroulé depuis l'engagement (m) */
+  wirePull = 0;
   private prevHookAxis = -1e9;
   catState = 0; // 0 libre, 1 attelé, 2 lancement, 3 lancé
   catIndex = -1;
@@ -858,7 +860,7 @@ export class FlightModel {
     this.updateMass();
 
     // ───── Catapulte ─────
-    if (this.ap.carrier && this.catState === 1 && inp[I.CATAPULT] > 0.5) {
+    if (this.ap.carrier && this.catState === 1 && inp[I.CATAPULT] > 0.5 && thr0 >= 0.85) {
       this.catState = 2;
       this.catV = 0;
       this.catS = 0;
@@ -917,6 +919,11 @@ export class FlightModel {
     if (this.nz > spec.perf.nzMax * 1.5 || this.nz < spec.perf.nzMin * 1.5) this.crash(`Rupture structurale (n = ${this.nz.toFixed(1)} g)`);
 
     // brins d'arrêt
+    if (this.ap.carrier && this.wire >= 0) {
+      const ang = this.pose.heading + this.ap.carrier.landingAngle * DEG;
+      const vrel = (S[3] - this.pose.vx) * Math.sin(ang) + (S[5] - this.pose.vz) * -Math.cos(ang);
+      if (vrel > 0) this.wirePull += vrel * dt;
+    }
     if (this.ap.carrier && this.wire < 0 && this.hook > 0.9 && this.catState === 0) {
       const c = this.ap.carrier;
       const tv = this.tv3;
@@ -1052,6 +1059,10 @@ export class FlightModel {
     out[O.GROUND_H] = this.groundH; out[O.SURF_KIND] = this.surfKind;
     out[O.STALLED] = this.ac.stall;
     out[O.WIND_SHEAR] = this.wind.burstActive ? 1 : 0;
+    out[O.CAT_S] = this.catS;
+    out[O.CAT_INDEX] = this.catIndex;
+    out[O.WIRE_PULL] = this.wirePull;
+    out[O.CAT_V] = this.catV;
     out[O.STOVL] = this.fanDoor;
     out[O.NOZZLE_ANGLE] = this.nozzleAng;
   }

@@ -89,8 +89,12 @@ export const O = {
   WIND_SHEAR: 109,
   STOVL: 110, // 0..1 ouverture portes soufflante
   NOZZLE_ANGLE: 111, // rad
+  CAT_S: 112, // course de la navette de catapulte (m)
+  CAT_INDEX: 113, // catapulte utilisée (−1 aucune)
+  WIRE_PULL: 114, // longueur de câble déroulée depuis l'engagement (m)
+  CAT_V: 115, // vitesse de la navette (m/s)
 } as const;
-export const OUT_SIZE = 112;
+export const OUT_SIZE = 116;
 
 export const I = {
   PITCH: 0,

@@ -8,7 +8,7 @@ import { PhysicsBridge } from '../physics/bridge';
 import { O, OUT_SIZE, I, LIGHT } from '../physics/layout';
 import type { SimConfig } from '../physics/protocol';
 import { InputManager } from '../controls/input';
-import type { Action } from '../controls/bindings';
+import { keyLabel, keyboardLayout, type Action } from '../controls/bindings';
 import { FlightScene, CAMERA_MODES, type CameraMode } from '../world/FlightScene';
 import { drawPFD, drawND, drawEICAS, drawAnalogPanel, buildRelief, type MapContext } from '../cockpit/instruments';
 import { drawHUD } from '../cockpit/hud';
@@ -45,6 +45,7 @@ export default function FlightView() {
   const [showFail, setShowFail] = useState(false);
   const [showDebug, setShowDebug] = useState(settings.graphics.showMetrics);
   const [showInstr, setShowInstr] = useState(true);
+  const [showHelp, setShowHelp] = useState(true);
   const [photo, setPhoto] = useState(false);
   const [crash, setCrash] = useState<string | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -202,6 +203,7 @@ export default function FlightView() {
     let raf = 0;
     let last = performance.now();
     let instrAcc = 0, uiAcc = 0, trailAcc = 0;
+    let hudDirty = false;
     const hudCtx = hudRef.current!.getContext('2d')!;
     const rq = new THREE.Quaternion();
     const re = new THREE.Euler();
@@ -277,8 +279,10 @@ export default function FlightView() {
       // HUD (cockpit des avions équipés, ou HUD plein écran en vue extérieure pour les chasseurs)
       const hc = hudRef.current!;
       if (hc.width !== window.innerWidth || hc.height !== window.innerHeight) { hc.width = window.innerWidth; hc.height = window.innerHeight; }
-      hudCtx.clearRect(0, 0, hc.width, hc.height);
-      if (avionicsOn && scene.mode === 'cockpit' && scene.cockpit.hudRect.present) {
+      const hudOn = avionicsOn && scene.mode === 'cockpit' && scene.cockpit.hudRect.present;
+      if (hudOn || hudDirty) { hudCtx.clearRect(0, 0, hc.width, hc.height); hudDirty = false; }
+      if (hudOn) {
+        hudDirty = true;
         const w = hc.width, h = hc.height;
         const clip = { x: w * 0.3, y: h * 0.12, w: w * 0.4, h: h * 0.52 };
         const flols = ap.carrier ? flolsBall(refScratch, eye.x, eye.y, eye.z) : null;
@@ -391,6 +395,7 @@ export default function FlightView() {
           <GlassButton size="sm" onClick={() => { const m: CameraMode = cam === 'cockpit' ? 'chase' : 'cockpit'; sceneRef.current?.setMode(m); setCam(m); }}>{cam === 'cockpit' ? 'Vue ext.' : 'Cockpit'}</GlassButton>
           <GlassButton size="sm" onClick={() => { const i = CAMERA_MODES.indexOf(cam); const m = CAMERA_MODES[(i + 1) % CAMERA_MODES.length]; sceneRef.current?.setMode(m); setCam(m); }}>Caméra</GlassButton>
           <GlassButton size="sm" active={showInstr} onClick={() => setShowInstr(!showInstr)}>Instruments</GlassButton>
+          <GlassButton size="sm" active={showHelp} onClick={() => setShowHelp(!showHelp)}>Commandes</GlassButton>
           <GlassButton size="sm" active={showFail} onClick={() => setShowFail(!showFail)}>Pannes</GlassButton>
           <GlassButton size="sm" active={showDebug} onClick={() => setShowDebug(!showDebug)}>Debug</GlassButton>
           <GlassButton size="sm" active={paused} onClick={() => setPaused(!paused)}>Pause</GlassButton>
@@ -439,6 +444,9 @@ export default function FlightView() {
           </div>
         </GlassPanel>
       )}
+
+      {/* aide-mémoire des commandes (touches réellement imprimées) */}
+      {showHelp && mode === 'sim' && <KeyHelp onClose={() => setShowHelp(false)} stovl={!!spec.stovl} hook={spec.hasHook} carrier={ap.id === 'cvn'} />}
 
       {/* panneau des pannes */}
       {showFail && p && mode === 'sim' && (
@@ -513,6 +521,40 @@ export default function FlightView() {
       {/* replay + analyse d'atterrissage */}
       {mode === 'replay' && record && <ReplayPanel record={record} t={replayT} play={replayPlay} onSeek={(t) => { replayRef.current.t = t; setReplayT(t); }} onPlay={(v) => { replayRef.current.play = v; setReplayPlay(v); }} onSpeed={(v) => { replayRef.current.speed = v; }} />}
     </div>
+  );
+}
+
+function KeyHelp({ onClose, stovl, hook, carrier }: { onClose: () => void; stovl: boolean; hook: boolean; carrier: boolean }) {
+  const b = useStore((s) => s.settings.controls.bindings);
+  const k = (a: Action) => (b[a] ?? []).map(keyLabel).join(' / ') || '—';
+  const rows: [string, string][] = [
+    ['Tangage (cabrer / piquer)', `${k('pitchUp')}  |  ${k('pitchDown')}`],
+    ['Roulis (gauche / droite)', `${k('rollLeft')}  |  ${k('rollRight')}`],
+    ['Palonnier', `${k('yawLeft')}  |  ${k('yawRight')}`],
+    ['Gaz + / −', `${k('throttleUp')}  |  ${k('throttleDown')}`],
+    ['Plein gaz / ralenti', `${k('throttleMax')}  |  ${k('throttleIdle')}`],
+    ['Volets + / −', `${k('flapsDown')}  |  ${k('flapsUp')}`],
+    ['Train · Freins · Frein de parc', `${k('gearToggle')} · ${k('brakes')} · ${k('parkingBrake')}`],
+    ['Aérofreins · Trim', `${k('speedbrakeToggle')} · ${k('trimUp')} ${k('trimDown')}`],
+    ['Pilote auto · Loi FBW', `${k('autopilot')} · ${k('fbwToggle')}`],
+    ['Caméra · Cockpit · Pause', `${k('cameraNext')} · ${k('cockpitToggle')} · ${k('pause')}`],
+  ];
+  if (hook) rows.push(['Crosse d\'appontage', k('hookToggle')]);
+  if (carrier && !stovl) rows.push(['Lancement catapulte (plein gaz d\'abord)', k('catapult')]);
+  if (stovl) rows.push(['STOVL · tuyère ↓ / ↑', `${k('stovlToggle')} · ${k('nozzleDown')} / ${k('nozzleUp')}`]);
+  return (
+    <GlassPanel className="absolute bottom-3 left-1/2 w-[520px] -translate-x-1/2 p-4">
+      <div className="mb-2 flex items-center justify-between">
+        <SectionTitle>Commandes {keyboardLayout !== 'inconnue' ? `(${keyboardLayout.toUpperCase()})` : ''}</SectionTitle>
+        <GlassButton size="sm" onClick={onClose}>Masquer</GlassButton>
+      </div>
+      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-[12px]">
+        {rows.map(([l, v]) => (
+          <div key={l} className="contents"><span className="text-white/60">{l}</span><span className="font-mono font-semibold">{v}</span></div>
+        ))}
+      </div>
+      <div className="mt-2 text-[10px] text-white/45">Remappage complet et manette/HOTAS : Paramètres → Clavier & souris.</div>
+    </GlassPanel>
   );
 }
 

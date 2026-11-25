@@ -67,6 +67,22 @@ describe('getSurfaceInfo', () => {
     expect(s.height).toBeCloseTo(152, 0);
     expect(s.ny).toBeGreaterThan(0.9999);
   });
+  it('taxiways et aires de trafic : surfaces revêtues continues, parking sur l\'aire', () => {
+    for (const id of ['lfbo', 'lflj', 'tffj'] as const) {
+      const ap = getAirport(id);
+      const s = createSurfaceInfo();
+      for (const t of ap.taxiways) {
+        const [ax, az] = t.pts[0], [bx, bz] = t.pts[t.pts.length - 1];
+        getSurfaceInfo(ap, (ax + bx) / 2, (az + bz) / 2, 0, s);
+        expect(s.kind, `${id} ${t.id}`).toBe(SURF_RUNWAY);
+        // pente faible sur toute voie de circulation
+        expect(Math.hypot(s.nx, s.nz) / s.ny, `${id} ${t.id}`).toBeLessThan(0.05);
+      }
+      getSurfaceInfo(ap, ap.parking.x, ap.parking.z, 0, s);
+      expect(s.kind, id).toBe(SURF_RUNWAY);
+      expect(s.ny).toBeGreaterThan(0.999);
+    }
+  });
   it('Courchevel : pente de 18,6 % sur la partie haute', () => {
     const ap = getAirport('lflj');
     const r = ap.runways[0];

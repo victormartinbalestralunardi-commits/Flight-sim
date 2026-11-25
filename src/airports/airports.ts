@@ -57,6 +57,28 @@ export interface CarrierDef {
   island: [number, number, number, number, number];
 }
 
+/** Voie de circulation : polyligne (monde x, z), hauteurs calculées depuis le profil de piste. */
+export interface TaxiwayDef {
+  id: string;
+  pts: [number, number][];
+  width: number;
+  /** hauteur à chaque sommet (remplie par `getAirport`) */
+  hs: number[];
+}
+
+/** Aire de trafic / parking : rectangle orienté plat. */
+export interface ApronDef {
+  id: string;
+  cx: number;
+  cz: number;
+  heading: number; // axe « longueur »
+  length: number;
+  width: number;
+  h: number;
+  /** postes de stationnement (distance le long de l'axe, depuis le centre) */
+  stands: number[];
+}
+
 export interface AirportDef {
   id: AirportId;
   icao: string;
@@ -67,6 +89,9 @@ export interface AirportDef {
   carrier?: CarrierDef;
   /** parking (cold & dark) */
   parking: { x: number; z: number; heading: number };
+  /** taxiways et aires de trafic (surfaces revêtues partagées physique / rendu) */
+  taxiways: TaxiwayDef[];
+  aprons: ApronDef[];
   /** rayon du monde rendu (m) */
   radius: number;
   oceanLevel: number | null;
@@ -107,11 +132,27 @@ export function dirFromHeading(hdgDeg: number): [number, number] {
 
 // ───────────────────────────── Définitions ─────────────────────────────
 
+/** Point monde à partir de coordonnées piste (s le long du QFU, l latéral à droite). */
+function rwPt(r: { thrX: number; thrZ: number; heading: number }, s: number, l: number): [number, number] {
+  const [dx, dz] = dirFromHeading(r.heading);
+  return [r.thrX + dx * s - dz * l, r.thrZ + dz * s + dx * l];
+}
+
+function twy(id: string, pts: [number, number][], width = 23): TaxiwayDef {
+  return { id, pts, width, hs: [] };
+}
+
+function apron(r: { thrX: number; thrZ: number; heading: number }, id: string, s: number, l: number, length: number, width: number, stands: number[], h = 0): ApronDef {
+  const [cx, cz] = rwPt(r, s, l);
+  return { id, cx, cz, heading: r.heading, length, width, h, stands };
+}
+
 function lfbo(): AirportDef {
   // Toulouse-Blagnac : 14R/32L 3000 m et 14L/32R 3500 m, QFU 143°, 152 m.
   const e = 152;
   const [dx, dz] = dirFromHeading(143);
   const rx = -dz, rz = dx; // à droite du QFU 143
+  const R14R = { thrX: 0, thrZ: 0, heading: 143 };
   return {
     id: 'lfbo', icao: 'LFBO', name: 'Toulouse-Blagnac',
     description: 'Doubles pistes 14/32, ILS catégorie III, PAPI 3°, hangars d\'assemblage.',
@@ -126,7 +167,31 @@ function lfbo(): AirportDef {
         profile: [{ s: 0, h: e + 1 }, { s: 3500, h: e - 2 }], ils: true, glideDeg: 3, tch: 15, papi: true,
       },
     ],
-    parking: { x: -rx * 420 + dx * 900, z: -rz * 420 + dz * 900, heading: 53 },
+    parking: (() => { const [x, z] = rwPt(R14R, 1150, 330); return { x, z, heading: 53 }; })(),
+    taxiways: [
+      // parallèle « A » côté aérogare et bretelles (dont sorties rapides)
+      twy('A', [rwPt(R14R, -120, 185), rwPt(R14R, 3120, 185)]),
+      twy('A1', [rwPt(R14R, -120, 0), rwPt(R14R, -120, 185)]),
+      twy('A3', [rwPt(R14R, 650, 0), rwPt(R14R, 650, 185)]),
+      twy('A5', [rwPt(R14R, 1350, 0), rwPt(R14R, 1350, 185)]),
+      twy('A7', [rwPt(R14R, 1900, 0), rwPt(R14R, 2150, 185)]),
+      twy('A9', [rwPt(R14R, 2550, 0), rwPt(R14R, 2800, 185)]),
+      twy('A11', [rwPt(R14R, 3120, 0), rwPt(R14R, 3120, 185)]),
+      // parallèle « B » de la 14L (côté halls d'assemblage) et liaisons entre pistes
+      twy('B', [rwPt(R14R, -520, -765), rwPt(R14R, 3220, -765)]),
+      twy('B1', [rwPt(R14R, -520, -950), rwPt(R14R, -520, -765)]),
+      twy('B9', [rwPt(R14R, 3220, -950), rwPt(R14R, 3220, -765)]),
+      twy('L1', [rwPt(R14R, 650, -765), rwPt(R14R, 650, 0)]),
+      twy('L2', [rwPt(R14R, 2150, -765), rwPt(R14R, 2150, 0)]),
+      // accès aux halls
+      twy('H', [rwPt(R14R, 1800, -765), rwPt(R14R, 1800, -1080)], 40),
+      // bretelle aire de trafic
+      twy('P', [rwPt(R14R, 1150, 185), rwPt(R14R, 1150, 232)], 30),
+    ],
+    aprons: [
+      apron(R14R, 'Aérogare', 1150, 320, 720, 175, [-280, -200, -120, -40, 40, 120, 200, 280], e - 1.15),
+      apron(R14R, 'Halls', 1800, -1180, 420, 200, [-120, 0, 120], e - 0.6),
+    ],
     radius: 30000, oceanLevel: null, groundTint: 0x6f8a4a,
   };
 }
@@ -136,6 +201,7 @@ function lflj(): AirportDef {
   const top = 2008;
   const lowerLen = 290, upperLen = 247;
   const h0 = top - upperLen * 0.186 - lowerLen * 0.125;
+  const R22 = { thrX: 0, thrZ: 0, heading: 220 };
   return {
     id: 'lflj', icao: 'LFLJ', name: 'Courchevel Altiport',
     description: 'Altiport alpin, piste de 537 m en pente jusqu\'à 18,6 %, approche à vue guidée (PAPI 4,5°).',
@@ -152,16 +218,16 @@ function lflj(): AirportDef {
         ils: false, glideDeg: 4.5, tch: 12, papi: true,
       },
     ],
-    parking: (() => {
-      const [dx, dz] = dirFromHeading(220);
-      return { x: dx * 590 + dz * 45, z: dz * 590 - dx * 45, heading: 130 };
-    })(),
+    parking: (() => { const [x, z] = rwPt(R22, 600, -62); return { x, z, heading: 130 }; })(),
+    taxiways: [twy('T', [rwPt(R22, 560, 0), rwPt(R22, 600, -30)], 15)],
+    aprons: [apron(R22, 'Plateforme', 600, -62, 90, 60, [-25, 0, 25], top + 1.5)],
     radius: 26000, oceanLevel: null, groundTint: 0x8c9682,
   };
 }
 
 function tffj(): AirportDef {
   // Saint-Barthélemy Rémy de Haenen : piste 10/28, 646 × 18 m, approche 10 au-dessus du col de la Tourmente.
+  const R10 = { thrX: 0, thrZ: 0, heading: 95 };
   return {
     id: 'tffj', icao: 'TFFJ', name: 'Saint-Barthélemy',
     description: 'Approche rasante au-dessus du col de la Tourmente, piste de 646 m finissant sur la baie de Saint-Jean.',
@@ -172,10 +238,12 @@ function tffj(): AirportDef {
         profile: [{ s: 0, h: 6 }, { s: 646, h: 3.5 }], ils: false, glideDeg: 6, tch: 12, papi: true,
       },
     ],
-    parking: (() => {
-      const [dx, dz] = dirFromHeading(95);
-      return { x: dx * 300 - dz * 55, z: dz * 300 + dx * 55, heading: 5 };
-    })(),
+    parking: (() => { const [x, z] = rwPt(R10, 300, 55); return { x, z, heading: 5 }; })(),
+    taxiways: [
+      twy('A', [rwPt(R10, 250, 0), rwPt(R10, 250, 33)], 15),
+      twy('B', [rwPt(R10, 370, 0), rwPt(R10, 370, 33)], 15),
+    ],
+    aprons: [apron(R10, 'Aérogare', 310, 55, 160, 44, [-50, -20, 10, 40], 5.5)],
     radius: 22000, oceanLevel: 0, groundTint: 0x5f7d3c,
   };
 }
@@ -202,6 +270,8 @@ function cvn(): AirportDef {
       island: [10, 52, 18, 28, 24],
     },
     parking: { x: 0, z: 0, heading: 0 },
+    taxiways: [],
+    aprons: [],
     radius: 40000, oceanLevel: 0, groundTint: 0x1d4f73,
   };
 }
@@ -210,7 +280,68 @@ const AIRPORTS: Record<AirportId, () => AirportDef> = { lfbo, lflj, tffj, cvn };
 export const AIRPORT_IDS: AirportId[] = ['lfbo', 'lflj', 'tffj', 'cvn'];
 
 export function getAirport(id: AirportId): AirportDef {
-  return AIRPORTS[id]();
+  const ap = AIRPORTS[id]();
+  // hauteurs des taxiways : profil de la piste la plus proche (ou aire de trafic)
+  for (const t of ap.taxiways) t.hs = t.pts.map(([x, z]) => pavedReferenceHeight(ap, x, z));
+  return ap;
+}
+
+/** Hauteur de référence d'un point revêtu : aire de trafic qui le contient, sinon piste la plus proche. */
+function pavedReferenceHeight(ap: AirportDef, x: number, z: number): number {
+  for (const a of ap.aprons) if (apronLocal(a, x, z, _al) && Math.abs(_al.s) <= a.length / 2 + 1 && Math.abs(_al.l) <= a.width / 2 + 1) return a.h;
+  let best = Infinity, h = ap.elevation;
+  const rc = { s: 0, l: 0 };
+  for (const r of ap.runways) {
+    runwayCoords(r, x, z, rc);
+    const d = Math.abs(rc.l) + Math.max(0, -rc.s, rc.s - r.length);
+    if (d < best) { best = d; h = profileHeight(r, Math.min(r.length, Math.max(0, rc.s))); }
+  }
+  return h;
+}
+
+const _al = { s: 0, l: 0 };
+/** Coordonnées locales d'une aire de trafic (toujours vrai ; remplit out). */
+export function apronLocal(a: ApronDef, x: number, z: number, out: { s: number; l: number }): boolean {
+  const [dx, dz] = dirFromHeading(a.heading);
+  const px = x - a.cx, pz = z - a.cz;
+  out.s = px * dx + pz * dz;
+  out.l = px * -dz + pz * dx;
+  return true;
+}
+
+export interface PavedHit {
+  height: number;
+  slopeX: number;
+  slopeZ: number;
+}
+
+/**
+ * Surface revêtue hors piste (taxiway / aire de trafic) au point (x, z), ou null.
+ * Taxiway : plan à pente linéaire le long du segment ; aire : plan horizontal.
+ */
+export function pavedSurface(ap: AirportDef, x: number, z: number, out: PavedHit): PavedHit | null {
+  for (const a of ap.aprons) {
+    apronLocal(a, x, z, _al);
+    if (Math.abs(_al.s) <= a.length / 2 && Math.abs(_al.l) <= a.width / 2) { out.height = a.h; out.slopeX = 0; out.slopeZ = 0; return out; }
+  }
+  for (const t of ap.taxiways) {
+    for (let i = 0; i < t.pts.length - 1; i++) {
+      const [ax, az] = t.pts[i], [bx, bz] = t.pts[i + 1];
+      const ex = bx - ax, ez = bz - az;
+      const L2 = ex * ex + ez * ez;
+      const u = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / L2));
+      const px = ax + ex * u, pz = az + ez * u;
+      // extrémités arrondies : congés de raccordement aux intersections
+      if ((x - px) ** 2 + (z - pz) ** 2 <= (t.width / 2) ** 2) {
+        const h0 = t.hs[i] ?? ap.elevation, h1 = t.hs[i + 1] ?? ap.elevation;
+        const g = (h1 - h0) / L2;
+        out.height = h0 + (h1 - h0) * u;
+        out.slopeX = g * ex; out.slopeZ = g * ez;
+        return out;
+      }
+    }
+  }
+  return null;
 }
 
 // ───────────────────────────── Géométrie piste ─────────────────────────────
@@ -317,11 +448,37 @@ function runwayBlend(ap: AirportDef, x: number, z: number, terrain: number): num
   return h;
 }
 
+/** Aplanissement autour des taxiways et aires de trafic. */
+function pavedBlend(ap: AirportDef, x: number, z: number, terrain: number): number {
+  let h = terrain;
+  const blendW = ap.id === 'lfbo' ? 120 : 45;
+  for (const a of ap.aprons) {
+    apronLocal(a, x, z, _al);
+    const d = Math.max(0, Math.abs(_al.s) - a.length / 2 - 15) + Math.max(0, Math.abs(_al.l) - a.width / 2 - 15);
+    const w = 1 - smoothstep(0, blendW, d);
+    if (w > 0) h = h * (1 - w) + a.h * w;
+  }
+  for (const t of ap.taxiways) {
+    for (let i = 0; i < t.pts.length - 1; i++) {
+      const [ax, az] = t.pts[i], [bx, bz] = t.pts[i + 1];
+      const ex = bx - ax, ez = bz - az;
+      const u = Math.max(0, Math.min(1, ((x - ax) * ex + (z - az) * ez) / (ex * ex + ez * ez)));
+      const d = Math.max(0, Math.hypot(x - ax - ex * u, z - az - ez * u) - t.width / 2 - 12);
+      const w = 1 - smoothstep(0, blendW, d);
+      if (w > 0) {
+        const ph = (t.hs[i] ?? ap.elevation) + ((t.hs[i + 1] ?? ap.elevation) - (t.hs[i] ?? ap.elevation)) * u;
+        h = h * (1 - w) + ph * w;
+      }
+    }
+  }
+  return h;
+}
+
 /** Altitude du sol (hors porte-avions) — fonction partagée rendu/physique. */
 export function terrainHeight(ap: AirportDef, x: number, z: number): number {
   if (ap.id === 'cvn') return -30;
   const t = naturalTerrain(ap, x, z);
-  return runwayBlend(ap, x, z, t);
+  return pavedBlend(ap, x, z, runwayBlend(ap, x, z, t));
 }
 
 // ───────────────────────────── Porte-avions ─────────────────────────────
@@ -400,6 +557,7 @@ export function deckHeightAt(c: CarrierDef, p: CarrierPose, s: number, l: number
 
 const _sc = { s: 0, l: 0 };
 const _pose = createCarrierPose();
+const _pv: PavedHit = { height: 0, slopeX: 0, slopeZ: 0 };
 
 /**
  * Source de vérité unique du sol : hauteur, normale, vitesse de surface et nature.
@@ -444,6 +602,15 @@ export function getSurfaceInfo(ap: AirportDef, x: number, z: number, t: number, 
       out.mu = 0.8;
       return out;
     }
+  }
+  const pv = pavedSurface(ap, x, z, _pv);
+  if (pv) {
+    const inv = 1 / Math.sqrt(1 + pv.slopeX * pv.slopeX + pv.slopeZ * pv.slopeZ);
+    out.height = pv.height;
+    out.nx = -pv.slopeX * inv; out.ny = inv; out.nz = -pv.slopeZ * inv;
+    out.kind = SURF_RUNWAY;
+    out.mu = 0.78;
+    return out;
   }
   const h = terrainHeight(ap, x, z);
   if (ap.oceanLevel !== null && h < ap.oceanLevel) {
@@ -604,7 +771,8 @@ export function startPose(ap: AirportDef, mode: StartMode, vAppMs: number, glide
   const [dx, dz] = dirFromHeading(r.heading);
   if (mode === 'cold') {
     const pk = ap.parking;
-    return { x: pk.x, z: pk.z, y: terrainHeight(ap, pk.x, pk.z), heading: pk.heading, airborne: false, speed: 0, gamma: 0, onCatapult: -1 };
+    const pv = pavedSurface(ap, pk.x, pk.z, { height: 0, slopeX: 0, slopeZ: 0 });
+    return { x: pk.x, z: pk.z, y: pv ? pv.height : terrainHeight(ap, pk.x, pk.z), heading: pk.heading, airborne: false, speed: 0, gamma: 0, onCatapult: -1 };
   }
   if (mode === 'runway') {
     const s = 40;

@@ -238,7 +238,8 @@ export class FlightScene {
     }
     if (this.gfx.clouds) {
       if (!this.clouds) {
-        this.clouds = new VolumetricClouds({ enabled: true, coverage: this.wx.cloudCover, base: this.wx.cloudBase + this.ap.elevation * (this.ap.id === 'lflj' ? 0.3 : 1), thickness: 1400, resolution: this.gfx.cloudRes });
+        const steps = { eco: 20, medium: 26, high: 32, ultra: 40, cinema: 48 }[this.gfx.preset];
+        this.clouds = new VolumetricClouds({ enabled: true, coverage: this.wx.cloudCover, base: this.wx.cloudBase + this.ap.elevation * (this.ap.id === 'lflj' ? 0.3 : 1), thickness: 1400, resolution: this.gfx.cloudRes, steps });
       }
       this.clouds.settings.resolution = this.gfx.cloudRes;
       this.cloudPass = new CloudPass(this.clouds, this.camera, () => (this.ssr ? this.ssr.beautyRenderTarget.depthTexture : this.depthPass.depthTexture));
@@ -263,6 +264,7 @@ export class FlightScene {
     this.camera.updateProjectionMatrix();
     this.renderer.shadowMap.enabled = gfx.shadows;
     if (shadowsChanged) this.setupSun();
+    if (pipeChanged && this.clouds) { this.clouds.dispose(); this.clouds = null; }
     if (pipeChanged) this.buildPipeline();
     if (todChanged) this.setTimeOfDay(wx.timeOfDay);
     if (this.clouds) {
@@ -314,6 +316,8 @@ export class FlightScene {
     this.scene.environmentIntensity = 0.25 + 0.75 * day;
     // feux plus visibles la nuit
     document.documentElement.style.setProperty('--glass-alpha', String(0.06 + 0.08 * day));
+    // balisage : discret le jour, éclatant la nuit
+    this.airport.lights.setIntensity(0.5 + 2.2 * (1 - day));
   }
 
   resize(w: number, h: number): void {
@@ -440,13 +444,13 @@ export class FlightScene {
   render(now: number, frameMs: number): void {
     // DRS : ajustement de l'échelle de résolution vers la cible FPS
     this.frameTimes[this.ftIdx++ % this.frameTimes.length] = frameMs;
-    if (this.gfx.drs && this.ftIdx % 30 === 0) {
+    if (this.gfx.drs && this.ftIdx % 15 === 0) {
       let avg = 0;
       for (const v of this.frameTimes) avg += v;
       avg /= this.frameTimes.length;
       const target = 1000 / this.gfx.targetFps;
       const prev = this.dynScale;
-      if (avg > target * 1.08) this.dynScale = Math.max(0.5, this.dynScale * 0.92);
+      if (avg > target * 1.08) this.dynScale = Math.max(0.5, this.dynScale * (avg > target * 1.5 ? 0.8 : 0.9));
       else if (avg < target * 0.8) this.dynScale = Math.min(1, this.dynScale * 1.04);
       if (Math.abs(prev - this.dynScale) > 1e-3) this.resize(this.width, this.height);
     }

@@ -153,7 +153,7 @@ export class PhysicsBridge {
     // grandeurs discrètes : valeur la plus récente
     o[O.ON_GROUND] = b[O.ON_GROUND]; o[O.CRASHED] = b[O.CRASHED]; o[O.TD_COUNT] = b[O.TD_COUNT];
     o[O.FCS_LAW] = b[O.FCS_LAW]; o[O.AP_FLAGS] = b[O.AP_FLAGS]; o[O.ENG_RUN] = b[O.ENG_RUN]; o[O.LIGHTS] = b[O.LIGHTS];
-    o[O.GPWS] = b[O.GPWS]; o[O.WIRE] = b[O.WIRE]; o[O.CAT_STATE] = b[O.CAT_STATE]; o[O.SURF_KIND] = b[O.SURF_KIND];
+    o[O.GPWS] = b[O.GPWS]; o[O.CAT_INDEX] = b[O.CAT_INDEX]; o[O.WIRE] = b[O.WIRE]; o[O.CAT_STATE] = b[O.CAT_STATE]; o[O.SURF_KIND] = b[O.SURF_KIND];
     // angles : interpolation sur le chemin court
     for (const k of [O.HEADING, O.CARRIER_HDG]) {
       let d = b[k] - a[k];

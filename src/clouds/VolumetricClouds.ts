@@ -22,7 +22,7 @@ float vnoise(vec3 p) {
   return mix(mix(mix(hash13(i), hash13(i + vec3(1,0,0)), f.x), mix(hash13(i + vec3(0,1,0)), hash13(i + vec3(1,1,0)), f.x), f.y),
              mix(mix(hash13(i + vec3(0,0,1)), hash13(i + vec3(1,0,1)), f.x), mix(hash13(i + vec3(0,1,1)), hash13(i + vec3(1,1,1)), f.x), f.y), f.z);
 }
-float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 5; i++) { s += a * vnoise(p); p *= 2.07; a *= 0.5; } return s; }
+float fbm(vec3 p) { float a = 0.5, s = 0.0; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p *= 2.07; a *= 0.5; } return s; }
 uniform float uBase; uniform float uTop; uniform float uCover; uniform vec3 uWindOffset;
 float density(vec3 p) {
   float h = (p.y - uBase) / (uTop - uBase);
@@ -33,7 +33,7 @@ float density(vec3 p) {
   float d = shape - (1.0 - uCover) * 0.72 - 0.1;
   d = d * profile;
   if (d <= 0.0) return 0.0;
-  d -= 0.12 * fbm(q * 6.0) * (1.0 - h);
+  d -= 0.1 * vnoise(q * 6.0) * (1.0 - h);
   return max(0.0, d) * 0.065;
 }
 `;
@@ -64,7 +64,7 @@ void main() {
   }
   t1 = min(t1, min(sceneDist, 60000.0));
   if (t1 <= t0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
-  const int STEPS = 48;
+  const int STEPS = CLOUD_STEPS;
   float stepLen = (t1 - t0) / float(STEPS);
   float jitter = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))) + uFrame * 0.618034);
   float T = 1.0; vec3 L = vec3(0.0);
@@ -77,7 +77,7 @@ void main() {
     if (d > 0.0) {
       // ombrage : densité accumulée vers le soleil
       float od = 0.0;
-      for (int j = 1; j <= 4; j++) od += density(p + uSunDir * float(j * j) * 45.0) * float(j) * 45.0;
+      for (int j = 1; j <= 3; j++) od += density(p + uSunDir * float(j * j) * 60.0) * float(j) * 60.0;
       float beer = exp(-od * 1.4);
       float powder = 1.0 - exp(-d * 2.0 * stepLen);
       vec3 S = uSunColor * beer * phase * (0.6 + 0.4 * powder) * 18.0 + uAmbient * (0.55 + 0.45 * (p.y - uBase) / (uTop - uBase));
@@ -153,7 +153,7 @@ void main() {
     if (wp.y < uBase && uSunDir.y > 0.02) {
       float t0 = (uBase - wp.y) / uSunDir.y, t1 = (uTop - wp.y) / uSunDir.y;
       float od = 0.0;
-      for (int k = 0; k < 3; k++) od += density(wp + uSunDir * mix(t0, t1, (float(k) + 0.5) / 3.0)) * (t1 - t0) / 3.0;
+      for (int k = 0; k < 2; k++) od += density(wp + uSunDir * mix(t0, t1, (float(k) + 0.5) / 2.0)) * (t1 - t0) / 2.0;
       col *= mix(1.0, exp(-od * 1.2), uShadow);
     }
   }
@@ -168,6 +168,8 @@ export interface CloudSettings {
   base: number;
   thickness: number;
   resolution: 0.5 | 0.25;
+  /** nombre de pas de raymarching (24 éco … 48 cinéma) */
+  steps?: number;
 }
 
 export class VolumetricClouds {
@@ -191,7 +193,7 @@ export class VolumetricClouds {
       uWindOffset: { value: this.windOffset },
     };
     this.march = new FullScreenQuad(new THREE.ShaderMaterial({
-      vertexShader: VERT, fragmentShader: MARCH_FRAG,
+      vertexShader: VERT, fragmentShader: MARCH_FRAG, defines: { CLOUD_STEPS: Math.round(settings.steps ?? 32) },
       uniforms: {
         ...common, tDepth: { value: null }, uInvProj: { value: new THREE.Matrix4() }, uInvView: { value: new THREE.Matrix4() },
         uCamPos: { value: new THREE.Vector3() }, uSunDir: { value: this.sunDir }, uSunColor: { value: this.sunColor }, uAmbient: { value: this.ambient },
