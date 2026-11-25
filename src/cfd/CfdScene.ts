@@ -10,6 +10,18 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { CFD_STYLE, jet, REGIME_COLORS } from './palette';
 import type { StreamlineResult, TunnelGeometry, TunnelResult } from './tunnel';
 import { installGlErrorHandler } from '../raytracing/glDebug';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import type { AircraftSpec } from '../aircraft/types';
+import { buildAircraftModel } from '../aircraft/procedural';
+
+/** Maillage du vrai modèle 3D associé aux panneaux VLM (calculé une fois par géométrie). */
+interface MappedMesh {
+  mesh: THREE.Mesh;
+  panel: Int32Array; // panneau VLM le plus proche (−1 = fuselage / nacelle)
+  upper: Uint8Array;
+  x: Float32Array; // abscisse modèle du sommet
+  n: Float32Array; // normale modèle (3 / sommet)
+}
 
 /** Demi-épaisseur NACA 4 chiffres (fraction de corde) à u. */
 function naca(u: number, t: number): number {
@@ -68,6 +80,12 @@ export class CfdScene {
   /** bornes de la légende des lignes (m/s) */
   lineMax = 1;
   lineMin = 0;
+  private key!: THREE.DirectionalLight;
+  private ground!: THREE.Mesh;
+  private realModel: THREE.Group | null = null;
+  private mapped: MappedMesh[] = [];
+  private mappedKey = '';
+  private realSpecKey = '';
 
   constructor(canvas: HTMLCanvasElement) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: false, powerPreference: 'high-performance' });
@@ -79,10 +97,25 @@ export class CfdScene {
     this.controls = new OrbitControls(this.camera, canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
-    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8090a8, 1.25));
-    const key = new THREE.DirectionalLight(0xffffff, 1.25);
+    this.scene.add(new THREE.HemisphereLight(0xffffff, 0x8090a8, 0.9));
+    const key = new THREE.DirectionalLight(0xffffff, 1.4);
     key.position.set(30, 60, 40);
-    this.scene.add(key);
+    key.castShadow = true;
+    key.shadow.mapSize.set(2048, 2048);
+    key.shadow.radius = 6;
+    this.key = key;
+    this.scene.add(key, key.target);
+    // éclairage studio réfléchissant (reflets sur la maquette)
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    const pm = new THREE.PMREMGenerator(this.renderer);
+    this.scene.environment = pm.fromScene(new RoomEnvironment(), 0.04).texture;
+    this.scene.environmentIntensity = 0.55;
+    pm.dispose();
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.ShadowMaterial({ opacity: 0.18 }));
+    this.ground.rotation.x = -Math.PI / 2;
+    this.ground.receiveShadow = true;
+    this.scene.add(this.ground);
     const rim = new THREE.DirectionalLight(0xdfe8ff, 0.5);
     rim.position.set(-40, 20, -50);
     this.scene.add(rim);
@@ -314,6 +347,11 @@ export class CfdScene {
       col.needsUpdate = true;
     }
     this.colorFuselage(r);
+    if (this.realModel && this.mappedKey !== this.geomKey) {
+      this.mapRealModel(g);
+      this.mappedKey = this.geomKey;
+    }
+    this.recolorReal(r);
   }
 
   /** Fuselage : Cp newtonien modifié (Lees), Cf de plaque plane le long de x, etc. */
@@ -351,6 +389,117 @@ export class CfdScene {
       col.setXYZ(i, lin(tmp[0]), lin(tmp[1]), lin(tmp[2]));
     }
     col.needsUpdate = true;
+  }
+
+  /** Charge le vrai modèle 3D (procédural PBR) de l'appareil, coloré ensuite par la CFD. */
+  setAircraft(spec: AircraftSpec): void {
+    const key = JSON.stringify([spec.id, spec.span, spec.wingArea, spec.surfaces.map((x) => x.stations.map((t) => t.le))]);
+    if (key === this.realSpecKey) return;
+    this.realSpecKey = key;
+    if (this.realModel) this.root.remove(this.realModel);
+    const m = buildAircraftModel(spec, 0).object;
+    m.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if ((o as THREE.Sprite).isSprite || (o as THREE.Light).isLight || (o as THREE.Points).isPoints) o.visible = false;
+      if (o.name.startsWith('afterburner') || o.name === 'prop_disc' || o.name === 'light_landing') o.visible = false;
+      if (mesh.isMesh) { mesh.castShadow = true; mesh.receiveShadow = true; }
+    });
+    this.realModel = m;
+    this.mapped = [];
+    this.mappedKey = '';
+    this.root.add(m);
+  }
+
+  /** Associe chaque sommet du vrai modèle au panneau VLM le plus proche (extrados / intrados). */
+  private mapRealModel(g: TunnelGeometry): void {
+    if (!this.realModel) return;
+    const n = g.n;
+    const cen = new Float32Array(3 * n), ch = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < 4; k++) for (let a = 0; a < 3; a++) cen[3 * i + a] += g.corners[12 * i + 3 * k + a] / 4;
+      ch[i] = 0.5 * (g.chordInfo[4 * i + 2] + g.chordInfo[4 * i + 3]) * (g.chordInfo[4 * i + 1] - g.chordInfo[4 * i]);
+    }
+    this.realModel.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.realModel.matrixWorld).invert();
+    const rel = new THREE.Matrix4(), nm = new THREE.Matrix3();
+    const v = new THREE.Vector3(), nn = new THREE.Vector3();
+    const tunnelMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.32, metalness: 0.08, envMapIntensity: 0.8 });
+    this.mapped = [];
+    this.realModel.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || !mesh.visible || (mesh as THREE.InstancedMesh).isInstancedMesh) return;
+      const mat = mesh.material as THREE.MeshPhysicalMaterial;
+      if (mat.transparent) return; // verrière : conserve le verre
+      const geo = mesh.geometry;
+      const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+      const nor = geo.getAttribute('normal') as THREE.BufferAttribute | undefined;
+      if (!pos || !nor) return;
+      rel.multiplyMatrices(inv, mesh.matrixWorld);
+      nm.getNormalMatrix(rel);
+      const cnt = pos.count;
+      const panel = new Int32Array(cnt).fill(-1), upper = new Uint8Array(cnt), xs = new Float32Array(cnt), ns = new Float32Array(3 * cnt);
+      for (let i = 0; i < cnt; i++) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(rel);
+        nn.fromBufferAttribute(nor, i).applyMatrix3(nm).normalize();
+        xs[i] = v.x;
+        ns[3 * i] = nn.x; ns[3 * i + 1] = nn.y; ns[3 * i + 2] = nn.z;
+        let best = Infinity, bi = -1;
+        for (let p = 0; p < n; p++) {
+          const dx = v.x - cen[3 * p], dy = v.y - cen[3 * p + 1], dz = v.z - cen[3 * p + 2];
+          const d = dx * dx + dy * dy + dz * dz;
+          if (d < best) { best = d; bi = p; }
+        }
+        const lim = Math.max(0.3, ch[bi] * 1.2 + g.thickness[bi] * ch[bi] * 6);
+        if (bi >= 0 && best < lim * lim) {
+          panel[i] = bi;
+          upper[i] = nn.x * g.normals[3 * bi] + nn.y * g.normals[3 * bi + 1] + nn.z * g.normals[3 * bi + 2] >= 0 ? 1 : 0;
+        }
+      }
+      if (!geo.getAttribute('color')) geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(cnt * 3), 3));
+      mesh.material = tunnelMat;
+      this.mapped.push({ mesh, panel, upper, x: xs, n: ns });
+    });
+    // le maillage de calcul n'est plus affiché : la vraie maquette le remplace
+    for (const m of [this.skinUpper, this.skinLower, this.fuselage]) if (m) m.visible = false;
+  }
+
+  /** Couleurs du vrai modèle : panneaux VLM pour les surfaces portantes, corps sinon. */
+  private recolorReal(r: TunnelResult): void {
+    if (!this.mapped.length) return;
+    const tauMax = this.tauMax(r), clMax = this.clMax(r);
+    const ca = Math.cos(this.alpha), sa = Math.sin(this.alpha), cb = Math.cos(this.beta), sb = Math.sin(this.beta);
+    const dx = -ca * cb, dy = sa * cb, dz = -sb;
+    const tmp = [0, 0, 0];
+    for (const mm of this.mapped) {
+      const col = mm.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+      for (let i = 0; i < mm.panel.length; i++) {
+        const p = mm.panel[i];
+        let val: number;
+        if (p >= 0) val = this.panelValue(r, p, mm.upper[i] === 1, tauMax, clMax);
+        else {
+          const xs = Math.max(0.05, -mm.x[i]);
+          const reX = (r.rho * r.V * xs) / r.mu;
+          const lam = reX < 5e5;
+          const cf = lam ? 0.664 / Math.sqrt(reX) : 0.0592 * Math.pow(reX, -0.2);
+          switch (this.surfaceMap) {
+            case 'velocity': val = 0.04; break;
+            case 'cp': {
+              const c = -(mm.n[3 * i] * dx + mm.n[3 * i + 1] * dy + mm.n[3 * i + 2] * dz);
+              const cp = c > 0 ? c * c - 0.42 * (1 - c) : -0.42 + 0.25 * -c;
+              val = (cp - CFD_STYLE.cpMin) / (CFD_STYLE.cpMax - CFD_STYLE.cpMin);
+              break;
+            }
+            case 'cf': val = cf / 0.006; break;
+            case 'tau': val = (cf * 0.5 * r.rho * r.V * r.V) / tauMax; break;
+            case 'regime': val = lam ? -1 : -2; break;
+            default: val = 0.06; break;
+          }
+        }
+        this.color(val, tmp);
+        col.setXYZ(i, lin(tmp[0]), lin(tmp[1]), lin(tmp[2]));
+      }
+      col.needsUpdate = true;
+    }
   }
 
   setResult(r: TunnelResult, alphaDeg: number, betaDeg: number): void {
@@ -410,7 +559,7 @@ export class CfdScene {
     this.disposeObj(this.leLines); this.leLines = null;
     const size = this.geom ? Math.max(this.geom.span, this.geom.length) : 10;
     const radius = size * 0.0028;
-    const RS = 6;
+    const RS = 8;
     let nPts = 0, nSegs = 0;
     for (let l = 0; l < s.offsets.length - 1; l++) {
       const c = s.offsets[l + 1] - s.offsets[l];
@@ -459,7 +608,7 @@ export class CfdScene {
     geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
     geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
     geo.setIndex(new THREE.BufferAttribute(idx, 1));
-    this.tubes = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.35, metalness: 0.05 }));
+    this.tubes = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.28, metalness: 0.0, clearcoat: 0.8, clearcoatRoughness: 0.15, envMapIntensity: 0.6 }));
     this.tubes.visible = this.showStreamlines;
     this.root.add(this.tubes);
     this.recolorLines();
@@ -507,6 +656,14 @@ export class CfdScene {
     this.box = new THREE.LineSegments(new THREE.EdgesGeometry(bg), new THREE.LineBasicMaterial({ color: CFD_STYLE.domainBox }));
     bg.dispose();
     bb.getCenter(this.box.position);
+    // ombre douce de la maquette sur le plancher de la veine
+    this.ground.scale.set(bb.max.x - bb.min.x, bb.max.z - bb.min.z, 1);
+    this.ground.position.set(this.box.position.x, bb.min.y + 0.01, this.box.position.z);
+    const sc = this.key.shadow.camera;
+    sc.left = -size; sc.right = size; sc.top = size; sc.bottom = -size; sc.near = 1; sc.far = size * 8;
+    sc.updateProjectionMatrix();
+    this.key.position.copy(this.box.position).add(new THREE.Vector3(size * 0.6, size * 2.5, size * 0.8));
+    this.key.target.position.copy(this.box.position);
     this.scene.add(this.box);
     this.axes.clear();
     const L = size * 0.14;
@@ -521,7 +678,7 @@ export class CfdScene {
     const s = this.lines;
     if (!s || !this.tubes) return;
     const col = this.tubes.geometry.getAttribute('color') as THREE.BufferAttribute;
-    const RS = 6;
+    const RS = 8;
     const tmp = [0, 0, 0];
     let vi = 0;
     for (let l = 0; l < s.offsets.length - 1; l++) {

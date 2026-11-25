@@ -5,6 +5,63 @@ horodatage UTC, fichiers, détail technique, état de vérification).
 
 ---
 
+## [0.6.0] — Performances, touches, taxiways, porte-avions, remodelage, soufflerie — 2026-11-25 12:40 UTC
+
+Demande utilisateur : remodéliser/affiner les avions, jeu trop lent, touches peu réactives,
+taxiways, CFD plus belle, catapulte et mécanisme d'arrêt sur le porte-avions.
+
+### Fichiers créés
+- `src/world/lightField.ts` — feux ponctuels instanciés (un seul draw call, halo shader,
+  couleurs dynamiques pour le PAPI, intensité jour/nuit).
+- `src/aircraft/livery.ts` — livrées procédurales plaquées en texture (UV fuselage) :
+  hublots, pare-brise, portes, cheatlines, ventre peint, immatriculations, radôme, lignes de
+  panneaux et trappes (chasseurs), cocardes basse visibilité (Rafale), carte de rugosité.
+
+### Fichiers modifiés
+- **Performances** : `airports/build3d.ts` (centaines de sprites → `LightField` ; bâtiments
+  fusionnés par matériau `StaticBatch` ; matériaux partagés ; eau 512²),
+  `clouds/VolumetricClouds.ts` (pas de raymarching selon le preset 20→48, fBm 4 octaves,
+  3 échantillons solaires, ombres au sol à 2 échantillons), `world/FlightScene.ts` (nuages
+  recréés au changement de preset, DRS toutes les 15 images avec pas adaptatif, intensité du
+  balisage), `aircraft/procedural.ts` (`mergeStatic` : fusion des pièces fixes par matériau),
+  `ui/FlightView.tsx` (HUD effacé seulement s'il a été dessiné), `ui/store.ts` (réglages v2 :
+  preset « Moyen » par défaut, cible 60 FPS, DPR 1,25, nuages ¼, path tracing 256 éch. ;
+  migration des contrôles/météo/audio depuis v1).
+- **Touches** : `controls/bindings.ts` (détection de la disposition AZERTY/QWERTZ via
+  `navigator.keyboard.getLayoutMap`, libellés des touches réellement imprimées),
+  `controls/input.ts` (axes 2× plus vifs, retour au neutre rapide, inversion instantanée,
+  gaz 0,8/s), `ui/glass.tsx` (les boutons rendent le focus : Espace/Entrée restent aux
+  commandes de vol), `ui/Settings.tsx` (disposition affichée, vitesse des axes jusqu'à 10/s),
+  `ui/FlightView.tsx` (aide-mémoire « Commandes » en vol), `main.tsx`.
+- **Taxiways** : `airports/airports.ts` (`TaxiwayDef`, `ApronDef`, `pavedSurface`, aplanissement
+  du terrain, `getSurfaceInfo` sur surfaces revêtues, parking Cold & Dark sur l'aire de trafic) :
+  LFBO (parallèles A et B, bretelles dont sorties rapides, liaisons entre pistes, aires
+  aérogare et halls), LFLJ (plateforme sommitale), TFFJ (aire de l'aérogare + 2 bretelles) ;
+  `build3d.ts` (taxiways texturés axe/bords jaunes, feux bleus, aires en béton à joints avec
+  lignes de guidage, barres d'arrêt et numéros de postes, projecteurs).
+- **Porte-avions** : `physics/layout.ts` (`CAT_S`, `CAT_INDEX`, `WIRE_PULL`, `CAT_V`,
+  `OUT_SIZE` 116), `physics/flightModel.ts` (retenue tant que les gaz < 85 %, longueur de
+  câble déroulée), `physics/bridge.ts`, `airports/carrier3d.ts` (navettes mobiles avec
+  rétraction, déflecteurs de jet levés pendant l'attelage, vapeur, **câble d'arrêt tendu en V
+  jusqu'à la crosse**, poulies), `world/FlightScene.ts` (point de crosse en repère navire),
+  `ui/FlightView.tsx` (bandeaux « Catapulte attelée », vitesse de lancement, « Brin n° »).
+- **Avions** : `aircraft/procedural.ts` (fuselage 96–120 × 40 segments, UV, couture lissée,
+  livrée, arceau de verrière, carénage voilure-fuselage, cône de queue/APU, carénage d'empennage
+  en T, chines/LERX F-22/F-35, perche de ravitaillement et raccords de canards Rafale, congés
+  d'emplanture et antenne DR-400, mâts réacteurs reliant nacelle et intrados).
+- **Soufflerie** : `cfd/CfdScene.ts` (le vrai modèle 3D est coloré par la CFD : chaque sommet
+  est associé au panneau VLM le plus proche, extrados/intrados selon la normale ; éclairage
+  studio réfléchissant `RoomEnvironment`, ombre douce sur le plancher de veine, tubes vernis à
+  8 segments), `ui/WindTunnel.tsx`.
+- Tests : `physics/physics.test.ts` (taxiways/aires, catapultage).
+
+### Vérification
+- `npx vitest run` : **35 tests / 35 réussis** ; `npm run build` : **OK, 0 erreur TypeScript**.
+- Captures Playwright : livrées (A380, Global 8000, DR-400, Rafale, F-35B), soufflerie avec
+  maquette réelle en vitesse et en Cp. Mesure de FPS non représentative ici (rendu logiciel).
+
+---
+
 ## [0.5.0] — Application installable (PWA) — 2026-11-25 14:10 UTC
 
 ### Fichiers créés

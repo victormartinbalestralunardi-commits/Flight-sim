@@ -4,6 +4,7 @@ import { CfdScene, type LegendInfo, type LineColoring, type SurfaceMap } from '.
 import type { StreamlineResult, TunnelRequest, TunnelResult } from '../cfd/tunnel';
 import { cssJet } from '../cfd/palette';
 import { getAircraft } from '../aircraft/specs';
+import { buildSpec } from '../aircraft/mods';
 import { store, useStore } from './store';
 import { Badge, GlassButton, GlassPanel, GlassSlider, GlassToggle, SectionTitle, Segmented, Stat } from './glass';
 import { LineChart } from './charts';
@@ -136,7 +137,7 @@ export function WindTunnel() {
     if (s) setLegends({ s: s.surfaceLegend(), l: s.lineLegend() });
   };
   useEffect(() => {
-    if (res) { sceneRef.current?.setResult(res, alpha, beta); refreshLegends(); }
+    if (res) { sceneRef.current?.setAircraft(buildSpec(aircraft, mods)); sceneRef.current?.setResult(res, alpha, beta); refreshLegends(); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [res]);
   useEffect(() => {
