@@ -1,0 +1,6 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; margin: 0; overflow: hidden; }
+body { font-family: 'SF Pro Display', 'SF Pro Text', Inter, system-ui, -apple-system, sans-serif; color: #f5f7fa; -webkit-font-smoothing: antialiased; }
