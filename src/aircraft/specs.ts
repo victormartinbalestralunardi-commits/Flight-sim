@@ -103,51 +103,56 @@ function f22(): AircraftSpec {
 
 // ───────────────────────────── F-35C Lightning II ─────────────────────────────
 function f35(): AircraftSpec {
-  // Variante embarquée C : envergure 13,1 m, surface 62,1 m², crosse renforcée.
-  const semi = 6.55;
-  const root = st(-5.8, 0.05, 0, 7.44, 0);
+  // Variante B (STOVL, décollage court / atterrissage vertical) : envergure 10,7 m, 42,7 m²,
+  // F135-PW-600 + LiftFan (89 kN), tuyère orientable 3BSM (80 kN), roll posts (2 × 8,7 kN).
+  const semi = 5.35;
+  const root = st(-5.9, 0.05, 0, 6.39, 0);
   const wing: LiftingSurface = {
     name: 'wing', role: 'wing', symmetric: true, airfoil: AF.naca64a204,
-    stations: [root, next(root, semi, 33, -2, 2.04, -2)],
+    stations: [root, next(root, semi, 33, -2, 1.59, -2)],
     controls: [
-      ctl('flap', 0.15, 0.6, 0.25, 30, 'flap'),
-      ctl('aileron', 0.62, 0.95, 0.28, 25, 'aileron'),
+      ctl('flap', 0.15, 0.55, 0.25, 30, 'flap'),
+      ctl('aileron', 0.58, 0.95, 0.28, 25, 'aileron'),
     ],
   };
-  const htRoot = st(-12.3, 0.0, 1.0, 3.2);
+  const htRoot = st(-12.2, 0.0, 1.0, 3.1);
   const htail: LiftingSurface = {
     name: 'htail', role: 'htail', symmetric: true, airfoil: AF.naca64a005,
-    stations: [htRoot, next(htRoot, 2.5, 38, 0, 1.0, 0)],
+    stations: [htRoot, next(htRoot, 2.35, 38, 0, 1.0, 0)],
     controls: [ctl('elevator', 0, 1, 1, 25, 'elevator')],
   };
   const vtail: LiftingSurface = {
     name: 'vtail', role: 'vtail', symmetric: true, airfoil: AF.naca64a005,
-    stations: fin(-11.3, 0.85, 1.35, 2.8, 2.2, 35, 1.1, 25),
+    stations: fin(-11.2, 0.85, 1.3, 2.7, 2.1, 35, 1.05, 25),
     controls: [ctl('rudder', 0.12, 0.9, 0.3, 30, 'rudder')],
   };
   return {
-    id: 'f35', name: 'F-35C Lightning II', manufacturer: 'Lockheed Martin', category: 'fighter', fcs: 'fbw',
-    length: 15.67, span: 13.1, height: 4.48, wingArea: 62.1,
+    id: 'f35', name: 'F-35B Lightning II', manufacturer: 'Lockheed Martin', category: 'fighter', fcs: 'fbw',
+    length: 15.6, span: 10.7, height: 4.36, wingArea: 42.7,
     surfaces: [wing, htail, vtail],
-    fuselage: { length: 15.67, width: 3.2, height: 2.0, axisY: 0, munk: 0.45 },
+    fuselage: { length: 15.6, width: 3.2, height: 2.0, axisY: 0, munk: 0.45 },
     engines: [
-      { type: 'turbojet_ab', pos: [-15.5, 0.05, 0], thrustDry: 125000, thrustAB: 191000, tsfc: 0.072, tsfcAB: 0.2, spoolTime: 3.5, bypass: 0.57 },
+      { type: 'turbojet_ab', pos: [-15.4, 0.05, 0], thrustDry: 120000, thrustAB: 182000, tsfc: 0.072, tsfcAB: 0.2, spoolTime: 3.5, bypass: 0.56 },
     ],
+    stovl: {
+      liftFanPos: [-5.2, 0.4, 0], liftFanRatio: 89 / 120, nozzlePos: [-13.6, -0.6, 0], nozzleRatio: 80 / 120,
+      rollPostPos: [-9.4, -0.3, 3.0], rollPostRatio: 8.7 / 120, nozzleMaxDeg: 95,
+    },
     gear: [
-      { name: 'gear_front', pos: [-3.7, -2.05, 0], travel: 0.4, steerable: true, braked: false, wheels: 2, wheelRadius: 0.3 },
-      { name: 'gear_main_L', pos: [-9.3, -2.05, -1.65], travel: 0.45, steerable: false, braked: true, wheels: 1, wheelRadius: 0.45 },
-      { name: 'gear_main_R', pos: [-9.3, -2.05, 1.65], travel: 0.45, steerable: false, braked: true, wheels: 1, wheelRadius: 0.45 },
+      { name: 'gear_front', pos: [-3.6, -2.0, 0], travel: 0.4, steerable: true, braked: false, wheels: 1, wheelRadius: 0.3 },
+      { name: 'gear_main_L', pos: [-9.3, -2.0, -1.6], travel: 0.45, steerable: false, braked: true, wheels: 1, wheelRadius: 0.45 },
+      { name: 'gear_main_R', pos: [-9.3, -2.0, 1.6], travel: 0.45, steerable: false, braked: true, wheels: 1, wheelRadius: 0.45 },
     ],
-    mass: { empty: 15785, mtow: 31751, fuelMax: 8960, payloadMax: 3000, kxx: 0.27, kyy: 0.4, kzz: 0.37 },
+    mass: { empty: 14650, mtow: 27200, fuelMax: 6125, payloadMax: 2000, kxx: 0.27, kyy: 0.4, kzz: 0.37 },
     perf: {
-      cd0: 0.021, cdGear: 0.014, cdFlaps: 0.025, cdSpeedbrake: 0.04, alphaStall: 26, alphaStallFlaps: 26, alphaMaxFcs: 30,
-      mdd: 0.92, nzMax: 7.5, nzMin: -3, vApp: 140, vR: 150, glideDeg: 3.5, maxSinkRate: 7.6, mmo: 1.6,
+      cd0: 0.022, cdGear: 0.014, cdFlaps: 0.025, cdSpeedbrake: 0.04, alphaStall: 26, alphaStallFlaps: 26, alphaMaxFcs: 25,
+      mdd: 0.92, nzMax: 7, nzMin: -3, vApp: 140, vR: 145, glideDeg: 3, maxSinkRate: 3.7, mmo: 1.6,
       flapDetents: [0, 0.5, 1], flapMaxDeg: 30, wingFlexPerG: 0.025,
     },
-    hasHook: true, hasAfterburner: true, xcgDefault: 24, xcgRange: [5, 38],
+    hasHook: false, hasAfterburner: true, xcgDefault: 24, xcgRange: [5, 38],
     eye: [-3.6, 1.0, 0],
     livery: { primary: 0x5e656b, secondary: 0x4b5157, accent: 0x9aa3a9 },
-    notes: 'Variante C (CATOBAR). Entrées d\'air DSI, mono-tuyère à bords dentelés, dérives jumelles inclinées 25° (silhouette en V).',
+    notes: 'Variante B STOVL : soufflante de sustentation derrière le cockpit, tuyère pivotante 3 paliers (0→95°), roll posts dans les ailes. Entrées d\'air DSI, dérives jumelles inclinées 25°.',
   };
 }
 

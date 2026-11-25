@@ -51,7 +51,7 @@ interface AeroOut {
   CL: number; CD: number; CY: number; Cl: number; Cm: number; Cn: number;
   CmOther: number; ClOther: number; CnOther: number;
   Cmde: number; Clda: number; Cndr: number;
-  stall: number; alphaStall: number;
+  stall: number; alphaStall: number; CLvortex: number;
 }
 
 export class FlightModel {
@@ -117,7 +117,7 @@ export class FlightModel {
 
   // dérivés pour la sortie
   readonly atmo: AtmoState = createAtmo();
-  private ac: AeroOut = { CL: 0, CD: 0, CY: 0, Cl: 0, Cm: 0, Cn: 0, CmOther: 0, ClOther: 0, CnOther: 0, Cmde: 0, Clda: 0, Cndr: 0, stall: 0, alphaStall: 0 };
+  private ac: AeroOut = { CL: 0, CD: 0, CY: 0, Cl: 0, Cm: 0, Cn: 0, CmOther: 0, ClOther: 0, CnOther: 0, Cmde: 0, Clda: 0, Cndr: 0, stall: 0, alphaStall: 0, CLvortex: 0 };
   alpha = 0; beta = 0; tas = 0; mach = 0; qbar = 0;
   nx = 0; ny = 0; nz = 1;
   agl = 100; groundH = 0; surfKind = 0;
@@ -243,7 +243,7 @@ export class FlightModel {
 
   private initPose(): void {
     const spec = this.spec;
-    const sp = startPose(this.ap, this.cfg.startMode, spec.perf.vApp * KT, this.ap.id === 'cvn' ? undefined : undefined);
+    const sp = startPose(this.ap, this.cfg.startMode, spec.perf.vApp * KT, undefined, !!spec.stovl);
     const S = this.S;
     const hdg = sp.heading * DEG;
     if (sp.airborne) {
@@ -377,7 +377,11 @@ export class FlightModel {
     o.stall = sig;
     const CLlin = (d.CL0 + CLa * alpha + d.CLflap * f * (1 - 0.3 * Math.min(1, M / 0.6))) * geLift;
     const CLpost = 1.05 * Math.sin(2 * alpha);
-    const CLwb = (1 - sig) * CLlin + sig * CLpost;
+    // portance tourbillonnaire de bord d'attaque (Polhamus), éclatement au-delà du décrochage
+    const sa = Math.sin(Math.abs(alpha));
+    const CLvort = d.Kv * sa * sa * Math.cos(alpha) * Math.sign(alpha) * (1 - sig) * (M < 1 ? 1 : 0.5);
+    o.CLvortex = CLvort;
+    const CLwb = (1 - sig) * CLlin + sig * CLpost + CLvort;
     const spoilerFactor = 1 - 0.35 * this.spoiler;
     const CLtailQ = d.CLq * qh;
     const CL = (CLwb * spoilerFactor) + CLtailQ + d.CLde * elev * (1 - 0.4 * sig);
@@ -393,7 +397,7 @@ export class FlightModel {
       else cdw = cdwMax * Math.pow(Math.sqrt(1.05 * 1.05 - 1) / Math.sqrt(M * M - 1), 0.6);
     }
     const CD = perf.cd0 + perf.cdGear * this.gearPos + perf.cdFlaps * f + perf.cdSpeedbrake * this.speedbrake +
-      0.03 * this.spoiler + K * CLwb * CLwb + cdw + sig * 1.1 * Math.sin(alpha) ** 2 + 0.4 * beta * beta;
+      0.03 * this.spoiler + K * (CLwb - CLvort) * (CLwb - CLvort) + Math.abs(CLvort * Math.tan(alpha)) + cdw + sig * 1.1 * Math.sin(alpha) ** 2 + 0.4 * beta * beta;
 
     // latéral
     const CY = d.CYb * beta + d.CYdr * rud + d.CYp * ph + d.CYr * rh;
@@ -420,6 +424,102 @@ export class FlightModel {
     o.CmOther = CmOther; o.ClOther = ClOther; o.CnOther = CnOther;
     o.Cmde = CmdeCg; o.Clda = Clda; o.Cndr = d.Cndr;
     return o;
+  }
+
+  // ───────────────────────────── STOVL (F-35B) ─────────────────────────────
+
+  /** Ouverture des portes de la soufflante (0..1), angle tuyère (rad), commandes de réaction. */
+  fanDoor = 0;
+  nozzleAng = 0;
+  private hoverDp = 0;
+  private hoverDr = 0;
+  private hoverDy = 0;
+  private hoverInt = 0;
+  private vzInt = 0;
+  private velIntF = 0;
+  private velIntL = 0;
+
+  /** Efforts propulsifs en configuration STOVL : tuyère pivotante + soufflante + roll posts. */
+  private stovlForces(T: number, Fb: Float64Array, Mb: Float64Array): void {
+    const sv = this.spec.stovl!;
+    const k = this.fanDoor;
+    const th = this.nozzleAng;
+    const xcg = this.xcg;
+    const addForce = (fx: number, fy: number, fz: number, x: number, y: number, z: number) => {
+      Fb[0] += fx; Fb[1] += fy; Fb[2] += fz;
+      const rx = x - xcg;
+      Mb[0] += y * fz - z * fy;
+      Mb[1] += z * fx - rx * fz;
+      Mb[2] += rx * fy - y * fx;
+    };
+    // tuyère : pousse vers l'avant puis vers le haut quand elle pivote ; sortie interpolée
+    const f = Math.min(1, th / (Math.PI / 2));
+    const e0 = this.spec.engines[0].pos;
+    const nx = e0[0] + (sv.nozzlePos[0] - e0[0]) * f, ny = e0[1] + (sv.nozzlePos[1] - e0[1]) * f;
+    const Tn = T * (1 - k + k * sv.nozzleRatio) * (1 - k * this.hoverDp * 0.35);
+    const yawA = this.hoverDy * 10 * DEG;
+    addForce(Tn * Math.cos(th) * Math.cos(yawA), Tn * Math.sin(th) * Math.cos(yawA), -Tn * Math.sin(yawA), nx, ny, 0);
+    if (k > 0) {
+      const Tf = T * k * sv.liftFanRatio * (1 + this.hoverDp * 0.35);
+      addForce(0, Tf, 0, sv.liftFanPos[0], sv.liftFanPos[1], 0);
+      const rp = sv.rollPostPos;
+      const Tp = T * k * sv.rollPostRatio;
+      addForce(0, Tp * (1 - this.hoverDr), 0, rp[0], rp[1], rp[2]);
+      addForce(0, Tp * (1 + this.hoverDr), 0, rp[0], rp[1], -rp[2]);
+    }
+  }
+
+  /**
+   * Loi de vol stationnaire « unifiée » (type F-35B) : manche = assiette/inclinaison,
+   * palonnier = taux de lacet, levier = vitesse verticale (tuyère > 60°, V < 60 m/s).
+   * Retourne le levier moteur calculé (ou −1 si le levier pilote est conservé).
+   */
+  private hoverControl(dt: number, stickP: number, stickR: number, pedal: number, lever: number): number {
+    const sv = this.spec.stovl!;
+    const S = this.S;
+    const T = Math.max(1000, this.engines[0].thrust);
+    const k = this.fanDoor;
+    const w = k * smoothstep(35 * DEG, 65 * DEG, this.nozzleAng) * (1 - smoothstep(40, 75, this.tas));
+    if (w <= 0.01) {
+      this.hoverDp = 0; this.hoverDr = 0; this.hoverDy = 0; this.hoverInt = 0; this.vzInt = 0; this.velIntF = 0; this.velIntL = 0;
+      return -1;
+    }
+    const pitch = this.euler[1], bank = this.euler[2];
+    // commande de vitesse de translation (relative à la surface : suit le pont mobile)
+    const hdg = this.euler[0];
+    const fx = Math.sin(hdg), fz = -Math.cos(hdg);
+    const vx = S[3] - this.surf.vx, vzH = S[5] - this.surf.vz;
+    const vFwd = vx * fx + vzH * fz, vLat = vx * -fz + vzH * fx;
+    const vFwdCmd = -stickP * 12, vLatCmd = stickR * 8;
+    this.velIntF = clamp(this.velIntF + (vFwdCmd - vFwd) * dt * 0.15, -0.15, 0.15);
+    this.velIntL = clamp(this.velIntL + (vLatCmd - vLat) * dt * 0.15, -0.15, 0.15);
+    // tangage
+    const thC = clamp(-0.035 * (vFwdCmd - vFwd) - this.velIntF, -12 * DEG, 14 * DEG);
+    const eTh = thC - pitch;
+    this.hoverInt = clamp(this.hoverInt + eTh * dt * 1.5, -0.6, 0.6);
+    const qDot = 5 * eTh - 4.5 * S[12] + 3 * this.hoverInt;
+    const armP = 0.35 * T * k * (sv.liftFanRatio * (sv.liftFanPos[0] - this.xcg) - sv.nozzleRatio * Math.sin(this.nozzleAng) * (sv.nozzlePos[0] - this.xcg));
+    this.hoverDp = clamp((this.Ipitch * qDot) / Math.max(1, armP), -1, 1) * w;
+    // roulis
+    const phC = clamp(0.035 * (vLatCmd - vLat) + this.velIntL, -20 * DEG, 20 * DEG);
+    const pDot = 7 * (phC - bank) - 5.5 * S[10];
+    const armR = T * k * sv.rollPostRatio * sv.rollPostPos[2] * 2;
+    this.hoverDr = clamp((this.Ixx * pDot) / Math.max(1, armR), -1, 1) * w;
+    // lacet (déflexion latérale de la tuyère)
+    const r = -S[11];
+    const rDot = 3 * (pedal * 0.6 - r);
+    const armY = T * sv.nozzleRatio * Math.sin(10 * DEG) * Math.abs(sv.nozzlePos[0] - this.xcg);
+    this.hoverDy = clamp((this.Iyaw * rDot) / Math.max(1, armY), -1, 1) * w;
+    // vitesse verticale commandée par le levier
+    if (this.nozzleAng < 60 * DEG || this.tas > 60) return -1;
+    const x = (lever - 0.5) * 2;
+    const vzCmd = Math.abs(x) < 0.06 ? 0 : (x - Math.sign(x) * 0.06) * 6.5;
+    const vz = S[4] - this.surf.vy;
+    this.vzInt = clamp(this.vzInt + (vzCmd - vz) * dt * 0.8, -3, 3);
+    const Fv = this.mass * (G0 + 1.6 * (vzCmd - vz) + this.vzInt);
+    const eff = (k * (sv.liftFanRatio + 2 * sv.rollPostRatio) + (1 - k + k * sv.nozzleRatio) * Math.sin(this.nozzleAng)) *
+      Math.max(0.5, Math.cos(pitch) * Math.cos(bank));
+    return clamp(leverForThrust(this.spec.engines[0], Fv / eff, this.atmo.sigma, this.mach, this.tas), 0, AB_DETENT);
   }
 
   // ───────────────────────────── Dérivée d'état ─────────────────────────────
@@ -463,9 +563,14 @@ export class FlightModel {
 
     // ───── Propulsion ─────
     const cn = Math.cos(this.nozzle), sn = Math.sin(this.nozzle);
+    const sv = this.spec.stovl;
     for (let i = 0; i < this.engines.length; i++) {
       const T = this.engines[i].thrust;
       if (T <= 0) continue;
+      if (sv && this.fanDoor > 0.01 || (sv && this.nozzleAng > 0.01)) {
+        this.stovlForces(T, Fb, Mb);
+        continue;
+      }
       const vec = this.engines[i].def.vectorDeg ? 1 : 0;
       const fx = T * (vec ? cn : 1), fy = -T * (vec ? sn : 0);
       Fb[0] += fx; Fb[1] += fy;
@@ -604,6 +709,7 @@ export class FlightModel {
       fy = sf.ny * fn - ty * s;
       fz = sf.nz * fn - tz * s;
       if (this.recording && pen > 0) {
+        if (-vn > this.structHit) this.structHitIdx = rb[0];
         this.structHit = Math.max(this.structHit, -vn);
         this.structPen = Math.max(this.structPen, pen);
         if (sf.kind === SURF_WATER) this.waterHit = true;
@@ -616,10 +722,14 @@ export class FlightModel {
     Mb[0] += rb[1] * wwv[2] - rb[2] * wwv[1];
     Mb[1] += rb[2] * wwv[0] - rb[0] * wwv[2];
     Mb[2] += rb[0] * wwv[1] - rb[1] * wwv[0];
-    if (this.recording && travel >= 0) this.gearVn[gi] = -vn;
+    if (this.recording && travel >= 0) {
+      this.gearVn[gi] = -vn;
+      if (sf.kind === SURF_WATER) this.waterHit = true;
+    }
     return pen;
   }
   private structHit = 0;
+  structHitIdx = 0;
   private structPen = 0;
   private waterHit = false;
   private readonly gearVn = new Float64Array(3);
@@ -721,13 +831,24 @@ export class FlightModel {
     const failMask = inp[I.FAIL_ENGINE] | 0;
     const cutMask = inp[I.ENGINE_CUT] | 0;
     let ff = 0;
+    let hoverLever = -1;
+    const sv = spec.stovl;
+    if (sv) {
+      const want = inp[I.STOVL] > 0.5;
+      this.fanDoor += clamp((want ? 1 : 0) - this.fanDoor, -dt / 4, dt / 4);
+      const nzTarget = want ? clamp(inp[I.NOZZLE], 0, 1) * sv.nozzleMaxDeg * DEG : 0;
+      this.nozzleAng += clamp(nzTarget - this.nozzleAng, -30 * DEG * dt, 30 * DEG * dt);
+      hoverLever = this.hoverControl(dt, pc.pitch, pc.roll, pc.yaw, thr0);
+    }
     for (let i = 0; i < this.engines.length; i++) {
       const e = this.engines[i];
       const wasRunning = e.running;
       e.failed = (failMask & (1 << i)) !== 0;
       e.cut = (cutMask & (1 << i)) !== 0;
-      const lever = clamp(pc.apAthr ? fo.throttle : thr0, 0, 1);
-      updateEngine(e, lever, (startMask & (1 << i)) !== 0, env, dt);
+      let lever = clamp(pc.apAthr ? fo.throttle : thr0, 0, 1);
+      if (sv && this.fanDoor > 0.05) lever = Math.min(lever, AB_DETENT); // PC interdite en STOVL
+      if (hoverLever >= 0) lever = hoverLever;
+      updateEngine(e, lever, (startMask & (1 << i)) !== 0, env, dt, sv && this.fanDoor > 0.5 ? 3 : 1);
       ff += e.ff;
       if (wasRunning !== e.running) this.events.push({ type: 'engine', index: i, running: e.running });
     }
@@ -929,6 +1050,8 @@ export class FlightModel {
     out[O.GROUND_H] = this.groundH; out[O.SURF_KIND] = this.surfKind;
     out[O.STALLED] = this.ac.stall;
     out[O.WIND_SHEAR] = this.wind.burstActive ? 1 : 0;
+    out[O.STOVL] = this.fanDoor;
+    out[O.NOZZLE_ANGLE] = this.nozzleAng;
   }
 
   /** Référence d'approche courante (ILS/FLOLS). */

@@ -576,7 +576,7 @@ export interface StartPose {
   onCatapult: number; // index catapulte ou −1
 }
 
-export function startPose(ap: AirportDef, mode: StartMode, vAppMs: number, glideOverride?: number): StartPose {
+export function startPose(ap: AirportDef, mode: StartMode, vAppMs: number, glideOverride?: number, stovl = false): StartPose {
   if (ap.carrier) {
     const c = ap.carrier;
     const p = carrierPose(c, 0, createCarrierPose());
@@ -590,6 +590,11 @@ export function startPose(ap: AirportDef, mode: StartMode, vAppMs: number, glide
         x: ref.x - dx * d, z: ref.z - dz * d, y: ref.y + d * Math.tan(g) + 4, heading: ref.heading,
         airborne: true, speed: vAppMs, gamma: -g, onCatapult: -1,
       };
+    }
+    if (stovl && mode === 'runway') {
+      // F-35B : décollage court (STO) depuis l'arrière du pont, sans catapulte
+      const w = shipToWorld(p, -120, 4, [0, 0]);
+      return { x: w[0], z: w[1], y: c.deckHeight, heading: c.heading, airborne: false, speed: c.speed, gamma: 0, onCatapult: -1 };
     }
     const cat = c.catapults[0];
     const w = shipToWorld(p, cat[0], cat[1], [0, 0]);

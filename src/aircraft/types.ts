@@ -87,6 +87,19 @@ export interface EngineDef {
   vectorDeg?: number;
 }
 
+/** Système de sustentation STOVL (F-35B). Les rapports sont relatifs à la poussée sèche du moteur. */
+export interface StovlDef {
+  liftFanPos: [number, number, number];
+  liftFanRatio: number;
+  /** sortie de la tuyère pivotante (position en mode vertical) */
+  nozzlePos: [number, number, number];
+  nozzleRatio: number;
+  /** roll posts (côté droit ; symétrique) */
+  rollPostPos: [number, number, number];
+  rollPostRatio: number;
+  nozzleMaxDeg: number;
+}
+
 export interface GearLeg {
   name: 'gear_front' | 'gear_main_L' | 'gear_main_R';
   /** point de contact roue sortie (modèle) */
@@ -165,6 +178,8 @@ export interface AircraftSpec {
   perf: Performance;
   hasHook: boolean;
   hasAfterburner: boolean;
+  /** décollage court / atterrissage vertical */
+  stovl?: StovlDef;
   /** centrage par défaut (% MAC) et plage autorisée */
   xcgDefault: number;
   xcgRange: [number, number];

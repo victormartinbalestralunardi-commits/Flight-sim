@@ -19,7 +19,7 @@ body { font-family: 'SF Pro Display', 'SF Pro Text', Inter, system-ui, -apple-sy
   isolation: isolate;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, calc(var(--glass-alpha) + 0.06)), rgba(255, 255, 255, calc(var(--glass-alpha) * 0.4))),
-    rgba(var(--glass-tint), 0.28);
+    rgba(var(--glass-tint), var(--glass-tint-a, 0.28));
   backdrop-filter: blur(28px) saturate(180%);
   -webkit-backdrop-filter: blur(28px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.28);

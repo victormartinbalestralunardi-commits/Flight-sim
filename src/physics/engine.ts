@@ -117,7 +117,7 @@ export interface EngineEnv {
 /**
  * Avance l'état moteur de dt. `startReq` : demande de démarrage (front montant géré par l'appelant).
  */
-export function updateEngine(e: EngineState, lever: number, startReq: boolean, env: EngineEnv, dt: number): void {
+export function updateEngine(e: EngineState, lever: number, startReq: boolean, env: EngineEnv, dt: number, spoolScale = 1): void {
   const def = e.def;
   const fuelOk = env.fuel > 0.5 && env.pumps && !e.cut;
   if (e.failed || !fuelOk) {
@@ -157,7 +157,7 @@ export function updateEngine(e: EngineState, lever: number, startReq: boolean, e
   }
   // moulinet en vol si arrêté
   if (!e.running && def.type !== 'piston') n1Target = Math.max(n1Target, Math.min(0.15, env.mach * 0.25));
-  const tau = def.spoolTime * (e.running ? 1.25 - 0.85 * e.n1 : 1.5);
+  const tau = (def.spoolTime / spoolScale) * (e.running ? 1.25 - 0.85 * e.n1 : 1.5);
   const k = clamp(dt / Math.max(0.05, tau), 0, 1);
   e.n1 += (n1Target - e.n1) * k;
   e.n2 += (n2Target - e.n2) * k * 1.3;

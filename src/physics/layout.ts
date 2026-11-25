@@ -87,6 +87,8 @@ export const O = {
   SURF_KIND: 107,
   STALLED: 108,
   WIND_SHEAR: 109,
+  STOVL: 110, // 0..1 ouverture portes soufflante
+  NOZZLE_ANGLE: 111, // rad
 } as const;
 export const OUT_SIZE = 112;
 
@@ -125,6 +127,8 @@ export const I = {
   WINDSHEAR: 35,
   RESET: 36,
   ENGINE_CUT: 37, // masque coupure carburant manuelle
+  STOVL: 38, // mode STOVL demandé (F-35B)
+  NOZZLE: 39, // consigne tuyère 0..1 (0 = horizontale, 1 = 95°)
 } as const;
 export const IN_SIZE = 40;
 

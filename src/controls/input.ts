@@ -49,6 +49,8 @@ export interface PilotState {
   failFbw: number;
   windshear: boolean;
   engineCut: number;
+  stovl: boolean;
+  nozzle: number;
 }
 
 const HOLD = new Set(ACTIONS.filter((a) => a.hold).map((a) => a.id));
@@ -77,7 +79,7 @@ export class InputManager {
       pitch: 0, roll: 0, yaw: 0, throttle: 0, flapIndex: cold ? 0 : Math.min(1, det.length - 1), gearDown: true, speedbrake: false,
       spoilerArm: false, brakes: 0, parking: cold, hook: false, trim: 0, lawDirect: false, apHdg: false, apAlt: false, apAthr: false,
       hdgTarget: 0, altTarget: 3000, spdTarget: spec.perf.vApp, lights: cold ? 0 : LIGHT.NAV | LIGHT.BEACON | LIGHT.STROBE,
-      battery: !cold, apu: false, pumps: !cold, avionics: !cold, engineStart: 0, catapult: false, failEngine: 0, failFbw: 0, windshear: false, engineCut: 0,
+      battery: !cold, apu: false, pumps: !cold, avionics: !cold, engineStart: 0, catapult: false, failEngine: 0, failFbw: 0, windshear: false, engineCut: 0, stovl: false, nozzle: 0,
     };
     this.rebuildMap();
   }
@@ -160,6 +162,7 @@ export class InputManager {
       case 'parkingBrake': p.parking = !p.parking; break;
       case 'hookToggle': if (this.spec.hasHook) p.hook = !p.hook; break;
       case 'catapult': p.catapult = true; break;
+      case 'stovlToggle': if (this.spec.stovl) { p.stovl = !p.stovl; if (!p.stovl) p.nozzle = 0; } break;
       case 'throttleIdle': p.throttle = 0; break;
       case 'throttleMax': p.throttle = 1; break;
       case 'fbwToggle': if (this.spec.fcs === 'fbw') p.lawDirect = !p.lawDirect; break;
@@ -217,6 +220,10 @@ export class InputManager {
     if (this.held('trimUp')) p.trim = Math.min(1, p.trim + 0.12 * dt);
     if (this.held('trimDown')) p.trim = Math.max(-1, p.trim - 0.12 * dt);
     p.brakes = this.held('brakes') ? 1 : 0;
+    if (p.stovl) {
+      if (this.held('nozzleDown')) p.nozzle = Math.min(1, p.nozzle + 0.35 * dt);
+      if (this.held('nozzleUp')) p.nozzle = Math.max(0, p.nozzle - 0.35 * dt);
+    }
   }
   private kp = 0;
   private kr = 0;
@@ -257,5 +264,7 @@ export class InputManager {
     inp[I.FAIL_FBW] = p.failFbw;
     inp[I.WINDSHEAR] = p.windshear ? 1 : 0;
     inp[I.ENGINE_CUT] = p.engineCut;
+    inp[I.STOVL] = p.stovl ? 1 : 0;
+    inp[I.NOZZLE] = p.nozzle;
   }
 }

@@ -64,6 +64,10 @@ export interface AeroDerivatives {
   aspect: number;
   /** α de portance nulle (rad) */
   alpha0: number;
+  /** constante de portance tourbillonnaire de bord d'attaque (analogie de succion de Polhamus) */
+  Kv: number;
+  /** flèche de bord d'attaque de l'aile (rad) */
+  sweepLE: number;
 }
 
 export interface DerivativeOptions {
@@ -199,6 +203,9 @@ export function computeDerivatives(spec: AircraftSpec, opts: DerivativeOptions =
     CLde, Cmde, Clda, Cnda, CYdr, Cldr, Cndr,
     CLflap, CmFlap, oswald, aspect: AR,
     alpha0: -r0.CL / CLa,
+    // Polhamus : Kv ≈ π pour un delta élancé ; seulement significatif pour les BA très en flèche
+    Kv: Math.PI * Math.min(1, Math.max(0, (sweepLE - (38 * Math.PI) / 180) / ((12 * Math.PI) / 180))),
+    sweepLE,
   };
 }
 

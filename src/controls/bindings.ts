@@ -9,7 +9,7 @@ export type Action =
   | 'flapsDown' | 'flapsUp' | 'gearToggle' | 'speedbrakeToggle' | 'brakes' | 'parkingBrake'
   | 'hookToggle' | 'trimUp' | 'trimDown' | 'fbwToggle' | 'autopilot' | 'catapult'
   | 'cameraNext' | 'cockpitToggle' | 'pause' | 'landingLights' | 'failuresPanel' | 'debugPanel'
-  | 'photoMode' | 'spoilerArm';
+  | 'photoMode' | 'spoilerArm' | 'stovlToggle' | 'nozzleDown' | 'nozzleUp';
 
 export type Bindings = Record<Action, string[]>;
 
@@ -41,6 +41,9 @@ export const ACTIONS: ActionInfo[] = [
   { id: 'parkingBrake', label: 'Frein de parc', group: 'Configuration', hold: false },
   { id: 'hookToggle', label: 'Crosse d\'appontage', group: 'Configuration', hold: false },
   { id: 'catapult', label: 'Lancement catapulte', group: 'Configuration', hold: false },
+  { id: 'stovlToggle', label: 'Mode STOVL (F-35B : portes soufflante)', group: 'Configuration', hold: false },
+  { id: 'nozzleDown', label: 'Tuyère vers le bas (STOVL)', group: 'Configuration', hold: true },
+  { id: 'nozzleUp', label: 'Tuyère vers l\'arrière (STOVL)', group: 'Configuration', hold: true },
   { id: 'trimUp', label: 'Trim cabreur', group: 'Systèmes', hold: true },
   { id: 'trimDown', label: 'Trim piqueur', group: 'Systèmes', hold: true },
   { id: 'fbwToggle', label: 'Bascule loi FBW (Normale / Directe)', group: 'Systèmes', hold: false },
@@ -75,6 +78,9 @@ export function defaultBindings(): Bindings {
     parkingBrake: ['KeyK'],
     hookToggle: ['KeyH'],
     catapult: ['KeyT'],
+    stovlToggle: ['KeyY'],
+    nozzleDown: ['Period'],
+    nozzleUp: ['Comma'],
     trimUp: ['BracketRight'],
     trimDown: ['BracketLeft'],
     fbwToggle: ['KeyL'],

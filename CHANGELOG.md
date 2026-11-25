@@ -5,6 +5,59 @@ horodatage UTC, fichiers, détail technique, état de vérification).
 
 ---
 
+## [0.2.1] — Sprint 2 (complément) : F-35B STOVL, couche limite, contraintes, Vmax, style CFD de référence — 2026-11-25 11:40 UTC
+
+Demande utilisateur en cours de sprint : flux laminaires/turbulents, tourbillons, coefficients de
+frottement et de portance, zones de contraintes, vitesse max ; F-35 en version à décollage vertical ;
+image de référence CFD fournie.
+
+### Fichiers créés
+- `src/cfd/boundaryLayer.ts` (couche limite, frottement, contraintes structurelles)
+
+### Fichiers modifiés
+- `src/aircraft/types.ts` : `StovlDef`, champ `stovl` d'`AircraftSpec`.
+- `src/aircraft/specs.ts` : **F-35C → F-35B** (10,7 m, 42,7 m², F135-PW-600 120/182 kN,
+  LiftFan 89 kN, tuyère 3BSM 80 kN, roll posts 2 × 8,7 kN, pas de crosse).
+- `src/physics/layout.ts` : entrées `STOVL`, `NOZZLE` ; sorties `STOVL`, `NOZZLE_ANGLE`.
+- `src/physics/engine.ts` : facteur d'accélération du régime (mode STOVL).
+- `src/physics/flightModel.ts` : efforts STOVL (tuyère pivotante 0→95° avec sortie interpolée,
+  soufflante, roll posts, déviation latérale de tuyère), **loi de vol stationnaire unifiée**
+  (manche = vitesse de translation par rapport à la surface → assiette/inclinaison, palonnier =
+  taux de lacet, levier = vitesse verticale, PC interdite), **portance tourbillonnaire de
+  Polhamus** (Kv sin²α cosα, traînée CLv·tanα), contact train/eau = amerrissage (crash).
+- `src/cfd/derivatives.ts` : `Kv` (Polhamus) et flèche BA.
+- `src/cfd/vlm.ts` : `addFilament` (filament tourbillonnaire à noyau visqueux).
+- `src/cfd/tunnel.ts` : couche limite + contraintes + **Vmax** (poussée max = traînée trimée,
+  bornée par MMO, courbes T/D), lignes de courant : râteau d'entrée 9 × 13 dans le repère vent,
+  **filaments de tourbillons de bord d'attaque** injectés dans le champ, classification
+  **laminaire / turbulent (sillages δ ∝ √(c·x), couche limite après transition) / tourbillon /
+  décollé**, fluctuations turbulentes déterministes, percentiles de |V| pour l'échelle.
+- `src/cfd/CfdScene.ts` (réécrit), `src/cfd/palette.ts` : **style de l'image de référence** —
+  fond clair, veine d'essai filaire bleue, graines rouges, tubes de courant ombrés colorés |V|
+  en m/s (échelle jet), maquette bleue (adhérence à la paroi), trièdre XYZ, particules animées ;
+  cartes de surface **|V|, Cp, Cf, τw, régime de couche limite, cl local, σ/σadm**.
+- `src/ui/WindTunnel.tsx` (réécrit) : légendes verticales numérotées, barre d'échelle, onglets
+  Verdict / Écoulement / Structure / Perfs, graphe σ(s), courbes poussée/traînée.
+- `src/controls/bindings.ts`, `input.ts` : actions `stovlToggle` (Y), `nozzleDown` (.), `nozzleUp` (,).
+- `src/airports/airports.ts` : départ STO du F-35B à l'arrière du pont (sans catapulte).
+- `src/ui/FlightSetup.tsx`, `src/index.css` (teinte de verre adaptative `--glass-tint-a`).
+- Tests : appontage refait avec le Rafale (crosse) + auto-manette ; nouveau test STOVL.
+
+### Équations ajoutées
+- Transition : Re_x = ρ V_e x / μ > Re_tr (4·10⁵ bois … 2,5·10⁶ composite lisse) ou minimum de Cp.
+- Cf laminaire 0,664/√Re_x ; turbulent 0,0592 Re_x^−0,2 · (1 + 0,144 M²)^−0,65 ; τw = Cf ½ρV_e².
+- Fuselage : Cf = 0,455/(log₁₀ Re_L)^2,58, FF = 1 + 60/f³ + f/400.
+- Flexion : M(s) = Σ (L_k − n g m_k)(s_k − s) ; σ = M/(h b t_peau) ; flèche ∬ M/(EI).
+- Polhamus : CL = Kp sinα cos²α + Kv sin²α cosα.
+- Vmax : max M tel que Σ T_max(M, σ) ≥ ½ρV² S CD(α_trim).
+
+### Vérification
+- `npx vitest run` : **32 tests / 32 réussis** (dont stationnaire + atterrissage vertical F-35B,
+  appontage Rafale, couche limite/contraintes/Vmax du 787, Vmax F-22 > M 1,5, tourbillons Polhamus).
+- `npm run build` : **OK, 0 erreur TypeScript**. Contrôle visuel Playwright de la soufflerie.
+
+---
+
 ## [0.2.0] — Sprint 2 : soufflerie CFD couplée & UI Liquid Glass — 2026-11-25 10:45 UTC
 
 ### Fichiers créés

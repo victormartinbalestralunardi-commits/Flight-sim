@@ -525,3 +525,12 @@ export function controlDeflection(
   }
   return d;
 }
+
+/** Vitesse induite au point P par un filament tourbillonnaire X1→X2 d'intensité Γ (noyau absolu rc). */
+export function addFilament(px: number, py: number, pz: number, x1: number, y1: number, z1: number, x2: number, y2: number, z2: number, gamma: number, rc: number, out: Float64Array): void {
+  const t = FIL_TMP;
+  t[0] = 0; t[1] = 0; t[2] = 0;
+  segment(px, py, pz, x1, y1, z1, x2, y2, z2, t, 0, rc * rc);
+  out[0] += gamma * t[0]; out[1] += gamma * t[1]; out[2] += gamma * t[2];
+}
+const FIL_TMP = new Float64Array(3);

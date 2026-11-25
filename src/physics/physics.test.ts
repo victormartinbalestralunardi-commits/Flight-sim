@@ -199,9 +199,12 @@ describe('Modèle de vol 6-DDL (RK4 240 Hz)', () => {
   });
 
   it('appontage : crosse + brin → arrêt sur le pont mobile', () => {
-    const m = new FlightModel(cfg('f35', 'cvn', 'final'));
+    const m = new FlightModel(cfg('rafale', 'cvn', 'final'));
+    const spec0 = m.spec;
     const inp = inputs(m.initialThrottle, m.flap);
     inp[I.HOOK] = 1;
+    inp[I.AP_ATHR_ON] = 1;
+    inp[I.AP_SPD] = m.spec.perf.vApp;
     // pilote auto simple : suit le FLOLS / axe en dérapage nul
     const out = new Float64Array(OUT_SIZE);
     let caught = false;
@@ -210,14 +213,15 @@ describe('Modèle de vol 6-DDL (RK4 240 Hz)', () => {
       const dev = ilsDeviation(ref, m.S[0], m.S[1], m.S[2], { loc: 0, gs: 0, locDeg: 0, gsDeg: 0, distance: 0, valid: false });
       m.writeOut(out, 0);
       const vsTarget = -Math.tan(3.5 * DEG) * (m.tas - 12.86) - dev.gsDeg * 1.5;
-      inp[I.PITCH] = Math.max(-0.5, Math.min(0.5, (vsTarget - m.S[4]) * 0.08));
+      void out;
+      inp[I.PITCH] = Math.max(-0.5, Math.min(0.5, (vsTarget - m.S[4]) * 0.03));
       const hd = ref.heading * DEG, ddx = Math.sin(hd), ddz = -Math.cos(hd);
       const lat = (m.S[0] - ref.x) * -ddz + (m.S[2] - ref.z) * ddx;
       const latV = (m.S[3] - m.pose.vx) * -ddz + (m.S[5] - m.pose.vz) * ddx;
       const bankDes = Math.max(-0.25, Math.min(0.25, -(lat * 0.006 + latV * 0.08)));
       inp[I.ROLL] = Math.max(-0.5, Math.min(0.5, (bankDes - out[O.BANK]) * 2));
-      inp[I.THROTTLE] = Math.max(0, Math.min(0.94, m.initialThrottle + (70 - m.tas) * 0.05));
-      if (m.onGroundMask) { inp[I.PITCH] = 0; inp[I.ROLL] = 0; inp[I.THROTTLE] = 0.9; }
+      inp[I.THROTTLE] = Math.max(0, Math.min(0.94, m.initialThrottle + (spec0.perf.vApp * KT - m.tas) * 0.05));
+      if (m.onGroundMask) { inp[I.PITCH] = 0; inp[I.ROLL] = 0; inp[I.THROTTLE] = 0.9; inp[I.AP_ATHR_ON] = 0; }
       if (m.wire >= 0) inp[I.THROTTLE] = 0.1;
       m.step(1 / 240, inp);
       if (m.wire >= 0) caught = true;
@@ -226,5 +230,29 @@ describe('Modèle de vol 6-DDL (RK4 240 Hz)', () => {
     expect(m.crashed, m.crashReason).toBe(false);
     expect(caught).toBe(true);
     expect(Math.hypot(m.S[3] - m.pose.vx, m.S[5] - m.pose.vz)).toBeLessThan(3);
+  });
+
+  it('F-35B STOVL : stationnaire stable (levier au neutre = V_z nulle), atterrissage vertical', () => {
+    const m = new FlightModel(cfg('f35', 'lfbo', 'runway'));
+    const inp = inputs(0.5, 0.5);
+    inp[I.STOVL] = 1;
+    inp[I.NOZZLE] = 1;
+    // placer l'avion en l'air, immobile, configuration STOVL établie
+    m.S[1] += 40;
+    m.fanDoor = 1;
+    m.nozzleAng = 95 * DEG;
+    for (const e of m.engines) { e.n1 = 0.85; e.n2 = 0.9; }
+    const y0 = m.S[1];
+    for (let i = 0; i < 240 * 15; i++) m.step(1 / 240, inp);
+    expect(m.crashed, m.crashReason).toBe(false);
+    expect(Math.abs(m.S[1] - y0)).toBeLessThan(3);
+    expect(Math.abs(m.euler[2])).toBeLessThan(3 * DEG);
+    expect(Math.hypot(m.S[3], m.S[5])).toBeLessThan(4);
+    // descente verticale : levier réduit → V_z ≈ −3 m/s, toucher doux
+    inp[I.THROTTLE] = 0.27;
+    for (let i = 0; i < 240 * 30 && m.onGroundMask === 0; i++) m.step(1 / 240, inp);
+    expect(m.crashed, m.crashReason).toBe(false);
+    expect(m.onGroundMask).not.toBe(0);
+    expect(m.tdVs).toBeLessThan(3.7);
   });
 });

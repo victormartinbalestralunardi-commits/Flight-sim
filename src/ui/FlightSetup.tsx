@@ -15,7 +15,7 @@ export function FlightSetup() {
   const mode = useStore((s) => s.startMode);
   const id = useStore((s) => s.aircraft);
   const spec = getAircraft(id);
-  const warnCarrier = ap === 'cvn' && !spec.hasHook;
+  const warnCarrier = ap === 'cvn' && !spec.hasHook && !spec.stovl;
   return (
     <div className="flex h-full w-full items-center justify-center bg-[radial-gradient(ellipse_at_bottom,#23406b_0%,#0c1320_60%,#05070c_100%)] p-8">
       <GlassPanel className="w-[960px] max-w-full p-8">
@@ -50,6 +50,7 @@ export function FlightSetup() {
             </button>
           ))}
         </div>
+        {ap === 'cvn' && spec.stovl && <div className="mt-4 text-[12px] text-[#9fd0ff]">F-35B : pas de crosse — décollage court (STO) depuis l'arrière du pont, appontage vertical (Y = mode STOVL, « . » / « , » = tuyère, levier = vitesse verticale).</div>}
         {warnCarrier && <div className="mt-4 text-[12px] text-[#ffd25a]">⚠ {spec.name} n'a pas de crosse : l'appontage sera impossible (seul le décollage catapulté reste possible).</div>}
         <div className="mt-6 flex justify-end gap-2">
           <GlassButton onClick={() => store.set({ settingsOpen: true })}>Météo & paramètres</GlassButton>
