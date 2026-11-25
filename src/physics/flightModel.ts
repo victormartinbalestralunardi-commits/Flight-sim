@@ -251,7 +251,9 @@ export class FlightModel {
       this.flap = spec.perf.flapDetents[spec.perf.flapDetents.length - 1];
       this.gearPos = 1;
       this.hook = spec.hasHook && this.ap.id === 'cvn' ? 1 : 0;
-      const V = sp.speed;
+      // vitesse d'approche publiée en CAS → TAS à l'altitude du terrain (altiports)
+      isa(sp.y, this.atmo, this.cfg.deltaIsa);
+      const V = sp.speed / Math.sqrt(this.atmo.sigma);
       const trim = this.trim(V, sp.gamma, sp.y);
       S[0] = sp.x; S[1] = sp.y; S[2] = sp.z;
       const ch = Math.cos(sp.gamma);
@@ -491,17 +493,17 @@ export class FlightModel {
     const vx = S[3] - this.surf.vx, vzH = S[5] - this.surf.vz;
     const vFwd = vx * fx + vzH * fz, vLat = vx * -fz + vzH * fx;
     const vFwdCmd = -stickP * 12, vLatCmd = stickR * 8;
-    this.velIntF = clamp(this.velIntF + (vFwdCmd - vFwd) * dt * 0.15, -0.15, 0.15);
-    this.velIntL = clamp(this.velIntL + (vLatCmd - vLat) * dt * 0.15, -0.15, 0.15);
+    this.velIntF = clamp(this.velIntF + (vFwdCmd - vFwd) * dt * 0.03, -0.12, 0.12);
+    this.velIntL = clamp(this.velIntL + (vLatCmd - vLat) * dt * 0.03, -0.12, 0.12);
     // tangage
-    const thC = clamp(-0.035 * (vFwdCmd - vFwd) - this.velIntF, -12 * DEG, 14 * DEG);
+    const thC = clamp(-0.022 * (vFwdCmd - vFwd) - this.velIntF, -12 * DEG, 14 * DEG);
     const eTh = thC - pitch;
-    this.hoverInt = clamp(this.hoverInt + eTh * dt * 1.5, -0.6, 0.6);
-    const qDot = 5 * eTh - 4.5 * S[12] + 3 * this.hoverInt;
+    this.hoverInt = clamp(this.hoverInt + eTh * dt * 1.0, -0.4, 0.4);
+    const qDot = 6 * eTh - 6 * S[12] + 3 * this.hoverInt;
     const armP = 0.35 * T * k * (sv.liftFanRatio * (sv.liftFanPos[0] - this.xcg) - sv.nozzleRatio * Math.sin(this.nozzleAng) * (sv.nozzlePos[0] - this.xcg));
     this.hoverDp = clamp((this.Ipitch * qDot) / Math.max(1, armP), -1, 1) * w;
     // roulis
-    const phC = clamp(0.035 * (vLatCmd - vLat) + this.velIntL, -20 * DEG, 20 * DEG);
+    const phC = clamp(0.022 * (vLatCmd - vLat) + this.velIntL, -20 * DEG, 20 * DEG);
     const pDot = 7 * (phC - bank) - 5.5 * S[10];
     const armR = T * k * sv.rollPostRatio * sv.rollPostPos[2] * 2;
     this.hoverDr = clamp((this.Ixx * pDot) / Math.max(1, armR), -1, 1) * w;

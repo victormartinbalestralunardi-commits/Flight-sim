@@ -5,6 +5,109 @@ horodatage UTC, fichiers, détail technique, état de vérification).
 
 ---
 
+## [0.4.0] — Sprint 4 : aéroports, porte-avions, nuages, boîte noire, audio, ray tracing — 2026-11-25 13:30 UTC
+
+### Fichiers créés
+- `src/airports/build3d.ts` — terrain à grille non uniforme (300², fine au centre) échantillonnant
+  `terrainHeight` (même fonction que la physique), pistes texturées (marquages OACI générés),
+  feux de bord/seuil/fin, rampe d'approche, **PAPI dynamiques** (calage 2,5/2,83/3,17/3,5° autour
+  de la pente, couleur calculée depuis l'œil), hangars à toit cintré (halls d'assemblage LFBO),
+  **tour de contrôle à radar rotatif**, chalets (LFLJ), maisons à flanc de colline (TFFJ),
+  végétation instanciée hors axe d'approche, **océan** (`Water`, normales procédurales).
+- `src/airports/carrier3d.ts` — coque extrudée depuis le contour EXACT du pont physique, pont
+  texturé (piste oblique −9°, catapultes), **4 brins d'arrêt**, île + radar, **FLOLS** (boule
+  ambre/rouge positionnée par `flolsBall` depuis l'œil, barres de datum vertes), feux de pont ;
+  animation tangage/roulis/pilonnement depuis l'état physique.
+- `src/clouds/VolumetricClouds.ts` — raymarching ½ ou ¼ résolution (48 pas, gigue IGN), densité
+  fBm 3D × couverture, **Beer-Lambert** vers le soleil, **Henyey-Greenstein double lobe (Mie)**,
+  « powder », ambiant ; **reprojection temporelle** (VP précédente, clamp de voisinage) ;
+  **suréchantillonnage bilatéral** pondéré par la profondeur ; **ombres des nuages au sol** ;
+  dérive avec le vent ; couleur/intensité selon l'heure.
+- `src/audio/FlightAudio.ts` — synthèse Web Audio : piston (fréquence d'allumage), turbofan
+  (sifflement aubes ∝ N1 + souffle + grondement), turboréacteur + crépitement PC, souffle
+  aérodynamique ∝ q, avertisseur de décrochage, **GPWS vocal** (Sink rate, Pull up, Too low
+  gear, Bank angle), annonces radio-altimètre, clics cockpit, impacts (toucher, brin, crash).
+- `src/raytracing/pathTracer.ts` — **path tracing progressif** (three-gpu-pathtracer) pour
+  l'Atelier et le **Mode Photo** (en pause) ; scène traçable filtrée, environnement studio HDR
+  équirectangulaire procédural, tuiles 3×3, basse résolution dynamique pendant le mouvement.
+- `src/replay/blackbox.test.ts` (boîte noire + check-list).
+
+### Fichiers modifiés
+- `src/replay/blackbox.ts` : échantillonnage 10 Hz sans dérive (reste conservé), distance de
+  freinage intégrée relativement à la surface (suit le pont mobile).
+- `src/physics/flightModel.ts` : TAS d'approche = CAS/√σ (altiports), réglage de la boucle
+  de translation STOVL (amortissement), `structHitIdx` de diagnostic.
+- `src/aircraft/specs.ts` : F-35B — emplanture d'aile reculée (−6,7 m), centrage 18 % MAC.
+- `src/aircraft/materials.ts` : suppression anisotropie/iridescence (NaN → écran noir via bloom).
+- `src/world/FlightScene.ts` : `SceneDepthPass` (cible dédiée + copie) contre la boucle de
+  rétroaction profondeur ; compteurs de draw calls cumulés sur toutes les passes.
+
+### Optimisation (cible 4K / 120 FPS)
+- Physique hors thread principal (worker 240 Hz), état interpolé sans allocation.
+- Nuages en ½ / ¼ résolution + TAA + upsampling bilatéral ; **DRS** (échelle 0,5–1 ajustée sur
+  la moyenne glissante des frame times vers la cible FPS) ; presets Éco → Cinéma.
+- Instruments cockpit rafraîchis à 30 Hz (CanvasTexture), HUD et boucles sans allocation
+  (vecteurs/quaternions pré-alloués), géométries instanciées (hublots, arbres, graines CFD).
+- Mesure : FPS, frame time, temps GPU (`EXT_disjoint_timer_query_webgl2`), draw calls,
+  triangles, textures, mémoire GPU estimée, DPR effectif, mode de transport physique.
+- *Limite de vérification : l'environnement de CI n'a pas de GPU (rendu logiciel SwiftShader,
+  ~3 s/frame) ; la cible 4K / 120 FPS n'a donc pas pu être mesurée ici et doit être validée
+  sur une machine équipée d'un GPU dédié via le panneau Debug (F3).*
+
+### Vérification
+- `npx vitest run` : **33 tests / 33 réussis**.
+- `npm run build` : **OK, 0 erreur TypeScript**.
+- Contrôles visuels Playwright : LFBO (piste, hangars, nuages, cockpit HUD), porte-avions en
+  finale (océan, ombres de nuages), Courchevel (vallée alpine en finale).
+
+---
+
+## [0.3.0] — Sprint 3 : flotte des 7 appareils, cockpits 3D, instruments, vol — 2026-11-25 12:50 UTC
+
+### Fichiers créés
+- `src/aircraft/materials.ts` — PBR : **RAM mat** (F-22/F-35 : rugosité 0,84 + sheen), peinture
+  **clearcoat** (A380/787/Global/DR-400), **aluminium brossé** des bords d'attaque, verrière teinte
+  or ITO (furtifs), caoutchouc, métal chaud.
+- `src/aircraft/procedural.ts` — modèles procéduraux générés depuis les MÊMES stations que le
+  VLM : fuselages superellipse par appareil (F-22 facetté à ombrage plat, A380 double pont…),
+  surfaces lofées (NACA, cambrure, vrillage), **gouvernes pivotantes** sur charnière (axe X local),
+  **segments d'aile chaînés pour la flexion dynamique** (787), winglets (A380, Global), nacelles
+  (soufflante rotative, **chevrons** 787), tuyères (F-22 2D vectorielles, F-35 dentelée, Rafale),
+  **postcombustion volumétrique avec anneaux de Mach**, hélice + disque de flou (DR-400), trains
+  (jambe, amortisseur `gear_strut_*`, bogies, carénages DR-400), verrières (coulissante DR-400),
+  hublots instanciés, entrées d'air (DSI F-35, caret F-22, semi-ventrales Rafale), crosse,
+  **feux NAV/STROBE/BEACON/LANDING** (+ projecteur), porte de soufflante STOVL.
+- `src/aircraft/animator.ts` — animation par convention de nommage (procédural **ou GLTF**).
+- `src/aircraft/gltf.ts` — chargeur `.glb/.gltf` + rapport des nœuds reconnus.
+- `src/cockpit/instruments.ts` — **PFD** (horizon, badin, altimètre, vario, cap, FMA, loi FBW,
+  **aiguilles ILS loc/glide**, α, radioaltimètre), **ND / Moving Map** (relief ombré, pistes, axes ILS,
+  **route du porte-avions**, trace parcourue, vent), **EICAS** (N1/N2/RPM, EGT, FF, carburant,
+  train, volets, STOVL, crosse), **planche analogique DR-400** (six pack + GPS).
+- `src/cockpit/hud.ts` — **HUD collimaté conformal** (échelle de tangage, FPV, boresight, ILS,
+  **boule FLOLS**, GPWS, indexeur d'incidence, mini-carte).
+- `src/cockpit/Cockpit3D.ts` — cockpits par catégorie (glass cockpit, 3 MFD, écran panoramique
+  F-35, planche analogique), **commandes cliquables** (raycast + info-bulle + clic sonore) : gaz
+  (cliquer-glisser), train, volets, aérofreins, frein de parc, crosse, feux, PA HDG/ALT/A-THR,
+  bascule FBW, batterie, APU/JFS, pompes, démarrage moteurs, avionique, STOVL, spoilers ;
+  manche/yoke et palonniers animés ; combinateur HUD.
+- `src/cockpit/checklist.ts` — **check-list Cold & Dark** validée par l'état physique.
+- `src/world/FlightScene.ts` — ciel physique + soleil selon l'heure (Jour / Golden Hour / Nuit),
+  **IBL dynamique** (PMREM du ciel), **CSM**, brouillard, GTAO, SSR (optionnel), bloom, ACES,
+  SMAA, DRS, caméras poursuite / **cockpit avec inertie de tête sous G** / orbite / tour /
+  passage / libre.
+- `src/ui/FlightView.tsx` — orchestration (worker, entrées, rendu, HUD, instruments, audio,
+  boîte noire), **3 modes de départ**, **panneau Pannes** (extinction moteur → poussée
+  asymétrique, FBW Alternate/Direct, wind shear), panneau Debug (métriques + erreurs GLSL),
+  pause, **mode photo**, voile noir/rouge, crash, **replay 3D + analyse d'atterrissage**.
+- `src/ui/HangarViewport.tsx` — Atelier 3D (path tracing progressif, démo gouvernes & feux,
+  import `.glb`).
+
+### Vérification
+- `npx vitest run` : 31 → **33 tests** (ajout boîte noire + check-list au Sprint 4).
+- `npm run build` : **OK, 0 erreur TypeScript**. Captures Playwright des 7 appareils à l'Atelier.
+
+---
+
 ## [0.2.1] — Sprint 2 (complément) : F-35B STOVL, couche limite, contraintes, Vmax, style CFD de référence — 2026-11-25 11:40 UTC
 
 Demande utilisateur en cours de sprint : flux laminaires/turbulents, tourbillons, coefficients de

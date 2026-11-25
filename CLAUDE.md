@@ -29,7 +29,8 @@ src/
                gestionnaire d'erreurs GLSL et métriques GPU.
   controls/    Mapping clavier (remapping + conflits + localStorage), souris-yoke, Gamepad/HOTAS.
   audio/       Synthèse Web Audio procédurale (piston, turbofan, PC, vent, alarmes, clics).
-  replay/      Boîte noire, analyse d'atterrissage, replay 3D.
+  replay/      Boîte noire (10 Hz), analyse d'atterrissage ; le replay 3D est piloté par
+               `ui/FlightView.tsx`.
   ui/          Composants React « Liquid Glass » (menus, atelier, soufflerie, paramètres...).
 ```
 
@@ -117,7 +118,20 @@ npm run build     # tsc -b + vite build — doit passer sans erreur
 4. **Sprint 4 — Monde** : 4 aéroports (LFBO, LFLJ, TFFJ, CVN), nuages volumétriques,
    boîte noire + replay, audio procédural, path tracing, passe d'optimisation, build final.
 
-## 7. Style de code
+## 7. Points d'attention
+
+* **F-35 = F-35B STOVL** (demande utilisateur) : `spec.stovl` (soufflante, tuyère 3BSM, roll
+  posts). Loi de vol stationnaire « unifiée » dans `flightModel.hoverControl`. Pas de crosse :
+  l'appontage du F-35B est vertical ; les tests d'appontage à brins utilisent le Rafale.
+* Soufflerie : la palette et le style suivent l'image de référence fournie (`cfd/palette.ts`).
+* Les matériaux à anisotropie / iridescence sont proscrits sur les modèles (NaN sans tangentes
+  → propagés par le bloom).
+* `SceneDepthPass` rend la scène dans une cible dédiée : ne jamais échantillonner une texture de
+  profondeur attachée au framebuffer courant (boucle de rétroaction WebGL).
+* Le path tracing exige un environnement équirectangulaire en données (`studioEquirect`), pas
+  un PMREM.
+
+## 8. Style de code
 
 * Pas de `any` implicite ; préférer des `Float64Array` à layout documenté pour l'état.
 * Les fichiers `*.test.ts` vivent à côté du module testé.

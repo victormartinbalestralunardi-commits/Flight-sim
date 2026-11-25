@@ -93,7 +93,7 @@ export class BlackBox {
     }
     this.acc += dt;
     if (this.acc < 1 / this.hz) return;
-    this.acc = 0;
+    this.acc -= 1 / this.hz;
     if ((this.n + 1) * NF > this.buf.length) return;
     const o = this.n * NF;
     const b = this.buf;

@@ -106,7 +106,7 @@ function f35(): AircraftSpec {
   // Variante B (STOVL, décollage court / atterrissage vertical) : envergure 10,7 m, 42,7 m²,
   // F135-PW-600 + LiftFan (89 kN), tuyère orientable 3BSM (80 kN), roll posts (2 × 8,7 kN).
   const semi = 5.35;
-  const root = st(-5.9, 0.05, 0, 6.39, 0);
+  const root = st(-6.7, 0.05, 0, 6.39, 0);
   const wing: LiftingSurface = {
     name: 'wing', role: 'wing', symmetric: true, airfoil: AF.naca64a204,
     stations: [root, next(root, semi, 33, -2, 1.59, -2)],
@@ -149,7 +149,7 @@ function f35(): AircraftSpec {
       mdd: 0.92, nzMax: 7, nzMin: -3, vApp: 140, vR: 145, glideDeg: 3, maxSinkRate: 3.7, mmo: 1.6,
       flapDetents: [0, 0.5, 1], flapMaxDeg: 30, wingFlexPerG: 0.025,
     },
-    hasHook: false, hasAfterburner: true, xcgDefault: 24, xcgRange: [5, 38],
+    hasHook: false, hasAfterburner: true, xcgDefault: 18, xcgRange: [5, 32],
     eye: [-3.6, 1.0, 0],
     livery: { primary: 0x5e656b, secondary: 0x4b5157, accent: 0x9aa3a9 },
     notes: 'Variante B STOVL : soufflante de sustentation derrière le cockpit, tuyère pivotante 3 paliers (0→95°), roll posts dans les ailes. Entrées d\'air DSI, dérives jumelles inclinées 25°.',
