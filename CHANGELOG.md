@@ -52,7 +52,7 @@ image de référence CFD fournie.
 - Vmax : max M tel que Σ T_max(M, σ) ≥ ½ρV² S CD(α_trim).
 
 ### Vérification
-- `npx vitest run` : **32 tests / 32 réussis** (dont stationnaire + atterrissage vertical F-35B,
+- `npx vitest run` : **31 tests / 31 réussis** (dont stationnaire + atterrissage vertical F-35B,
   appontage Rafale, couche limite/contraintes/Vmax du 787, Vmax F-22 > M 1,5, tourbillons Polhamus).
 - `npm run build` : **OK, 0 erreur TypeScript**. Contrôle visuel Playwright de la soufflerie.
 
