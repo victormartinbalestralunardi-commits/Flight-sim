@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b5c9e"/>
+      <stop offset="1" stop-color="#0b1424"/>
+    </linearGradient>
+    <linearGradient id="jet" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c9d6e8"/>
+    </linearGradient>
+    <clipPath id="clip"><rect width="512" height="512" rx="112"/></clipPath>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#bg)"/>
+  <circle cx="380" cy="130" r="150" fill="#0a84ff" opacity="0.25" clip-path="url(#clip)"/>
+  <!-- delta-canard vu de dessus, nez vers le haut -->
+  <path fill="url(#jet)" d="M256 70 C266 95 270 130 272 165 L286 175 L330 195 L332 210 L276 205
+    L280 250 L392 330 L396 352 L282 336 L284 392 L318 418 L318 434 L264 424 L256 440 L248 424
+    L194 434 L194 418 L228 392 L230 336 L116 352 L120 330 L232 250 L236 205 L180 210 L182 195
+    L226 175 L240 165 C242 130 246 95 256 70 Z"/>
+  <path d="M256 120 C262 140 263 160 263 178 L249 178 C249 160 250 140 256 120 Z" fill="#c9a85a" opacity="0.9"/>
+</svg>

@@ -1,0 +1,7 @@
+# Netlify / Cloudflare Pages : isolation cross-origin (SharedArrayBuffer)
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+/sw.js
+  Cache-Control: no-cache

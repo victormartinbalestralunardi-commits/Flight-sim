@@ -2,8 +2,10 @@
 import { store } from './store';
 import { GlassButton, GlassPanel } from './glass';
 import { sharedMemoryAvailable } from '../physics/bridge';
+import { promptInstall, useInstallState } from '../pwa';
 
 export function MainMenu() {
+  const install = useInstallState();
   return (
     <div className="relative flex h-full w-full items-center justify-center overflow-hidden bg-[radial-gradient(ellipse_at_top,#2b4a7a_0%,#0e1626_55%,#05070c_100%)]">
       <div className="pointer-events-none absolute -left-40 -top-40 h-[620px] w-[620px] rounded-full bg-[#0a84ff]/25 blur-[120px]" />
@@ -18,7 +20,11 @@ export function MainMenu() {
           <GlassButton size="lg" onClick={() => store.set({ screen: 'tunnel' })}>Soufflerie CFD</GlassButton>
           <GlassButton size="lg" onClick={() => store.set({ screen: 'setup' })}>Vol rapide</GlassButton>
           <GlassButton size="lg" onClick={() => store.set({ settingsOpen: true })}>Paramètres</GlassButton>
+          {install === 'available' && (
+            <GlassButton variant="success" size="lg" onClick={() => void promptInstall()}>Installer l'application</GlassButton>
+          )}
         </div>
+        {install === 'installed' && <div className="mt-4 text-[11px] text-[#8ff5b5]">Application installée — lancement depuis le bureau, jouable hors ligne.</div>}
         <div className="mt-6 text-[11px] text-white/35">
           Physique : {sharedMemoryAvailable() ? 'SharedArrayBuffer (isolation cross-origin active)' : 'postMessage + buffers transférables (fallback)'}
         </div>

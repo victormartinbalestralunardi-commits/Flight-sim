@@ -104,7 +104,12 @@ de remplacer n'importe quel appareil par un `.glb` sans toucher au code.
 npm run dev       # serveur Vite (COOP/COEP actifs)
 npm test          # vitest (noyau math/physique/VLM/surface)
 npm run build     # tsc -b + vite build — doit passer sans erreur
+VITE_BASE=/Flight-sim/ npm run build   # build pour GitHub Pages (sous-chemin)
 ```
+
+**PWA** : `sw.js` est généré au build par le plugin `aerosim-pwa` (`vite.config.ts`) depuis
+`pwa/sw-template.js` ; ne pas l'écrire à la main. Toute nouvelle ressource chargée à
+l'exécution depuis une autre origine doit être servie en CORS (COEP `require-corp`).
 
 ## 6. Plan en 4 sprints
 

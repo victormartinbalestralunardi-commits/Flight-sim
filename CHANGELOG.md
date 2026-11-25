@@ -5,6 +5,38 @@ horodatage UTC, fichiers, détail technique, état de vérification).
 
 ---
 
+## [0.5.0] — Application installable (PWA) — 2026-11-25 14:10 UTC
+
+### Fichiers créés
+- `public/manifest.webmanifest` — nom, icônes (dont *maskable*), affichage plein écran, paysage.
+- `public/icons/icon.svg`, `icon-192.png`, `icon-512.png`, `icon-maskable-512.png`,
+  `apple-touch-icon.png` (rendus depuis le SVG).
+- `pwa/sw-template.js` — service worker : pré-cache complet (jeu jouable hors ligne),
+  navigation réseau d'abord avec repli sur le cache, **injection des en-têtes COOP/COEP/CORP**
+  (isolation cross-origin → SharedArrayBuffer même sur GitHub Pages).
+- `src/pwa.ts` — enregistrement du service worker (production), rechargement unique si la page
+  n'est pas encore isolée (anti-boucle), gestion de `beforeinstallprompt`.
+- `public/_headers` (Netlify / Cloudflare Pages), `vercel.json` — en-têtes COOP/COEP.
+- `.github/workflows/deploy-pages.yml` — tests + build + déploiement GitHub Pages à chaque push.
+- `README.md` — lancement, installation, déploiement.
+
+### Fichiers modifiés
+- `vite.config.ts` — `base` configurable (`VITE_BASE`), plugin `aerosim-pwa` qui génère `sw.js`
+  avec la liste exacte des fichiers et une version dérivée de leur contenu.
+- `index.html` — manifeste, icônes, `theme-color`, balises mobiles.
+- `src/main.tsx` — appel de `registerPwa()`.
+- `src/ui/MainMenu.tsx` — bouton **« Installer l'application »** / mention « installée ».
+- `package.json` — `@types/node` (typage de la config Vite).
+
+### Vérification
+- `npx vitest run` : **33 tests / 33 réussis** ; `npm run build` : **OK, 0 erreur TypeScript**.
+- Test Playwright sur un serveur statique **sans en-têtes** sous `/Flight-sim/` (cas GitHub Pages) :
+  service worker actif, `crossOriginIsolated === true` après le rechargement automatique,
+  manifeste chargé, **aucune erreur d'installabilité Chrome**, puis **réseau coupé** :
+  menu affiché et vol lancé (worker physique opérationnel hors ligne).
+
+---
+
 ## [0.4.0] — Sprint 4 : aéroports, porte-avions, nuages, boîte noire, audio, ray tracing — 2026-11-25 13:30 UTC
 
 ### Fichiers créés
